@@ -15,12 +15,13 @@
     "@solana/web3.js": "^1.98.0"
   },
   "devDependencies": {
-    "solana-bankrun": "^0.4.0",
-    "anchor-bankrun": "^0.5.0",
+    "@solana/spl-token": "^0.4.14",
     "@types/bn.js": "^5.1.0",
     "@types/mocha": "^10.0.0",
+    "anchor-bankrun": "^0.5.0",
     "chai": "^4.4.0",
     "mocha": "^10.7.0",
+    "solana-bankrun": "^0.4.0",
     "ts-mocha": "^10.0.0",
     "typescript": "^5.5.0"
   }
