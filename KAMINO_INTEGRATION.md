@@ -8,7 +8,7 @@ Delta Mint creates **KYC-gated wrapped tokens** (starting with dUSDY, a 1:1 wrap
 ┌──────────────────────────────────────────────────────┐
 │                    Delta Stack                       │
 │                                                      │
-│  ┌─────────────┐    ┌──────────────────────────────┐ │
+│  ┌───────────-──┐    ┌─────────────────────────────┐ │
 │  │ delta-mint   │    │     Kamino Lend V2          │ │
 │  │ (our program)│    │   (audited infra)           │ │
 │  │              │    │                             │ │
@@ -16,7 +16,7 @@ Delta Mint creates **KYC-gated wrapped tokens** (starting with dUSDY, a 1:1 wrap
 │  │ • Whitelist  │    │ • Custom reserves           │ │
 │  │ • Conf. Tx   │    │ • Oracle + IR curves        │ │
 │  │ • Mint auth  │    │ • Liquidation engine        │ │
-│  └─────────────┘    └──────────────────────────────┘ │
+│  └-─────────────┘    └─────────────────────────────┘ │
 │                                                      │
 │  We build this        We use this (as-is)            │
 └──────────────────────────────────────────────────────┘
@@ -185,23 +185,23 @@ Liquidator receives dUSDY collateral (+ bonus)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  Liquidation Strategy                     │
-│                                                          │
-│  Fast path (minutes):                                    │
+│                  Liquidation Strategy                   │
+│                                                         │
+│  Fast path (minutes):                                   │
+│  ┌────────────────────────────────────────────────┐     │
+│  │ Pre-approved KYC'd liquidator bots             │     │
+│  │ • Whitelisted via add_liquidator()             │     │
+│  │ • Role = Liquidator (cannot mint, only receive)│     │
+│  │ • Act immediately when positions go underwater │     │
+│  └────────────────────────────────────────────────┘     │
+│                                                         │
+│  Backstop (72hr margin call):                           │
 │  ┌──────────────────────────────────────────────┐       │
-│  │ Pre-approved KYC'd liquidator bots            │       │
-│  │ • Whitelisted via add_liquidator()            │       │
-│  │ • Role = Liquidator (cannot mint, only receive)│      │
-│  │ • Act immediately when positions go underwater │       │
-│  └──────────────────────────────────────────────┘       │
-│                                                          │
-│  Backstop (72hr margin call):                            │
-│  ┌──────────────────────────────────────────────┐       │
-│  │ Kamino Auto-Deleverage                        │       │
-│  │ • Triggered by Risk Council via multisig       │       │
-│  │ • Sells collateral on open market              │       │
-│  │ • No third party receives dUSDY directly       │       │
-│  │ • autodeleverageEnabled = 1 in market config   │       │
+│  │ Kamino Auto-Deleverage                       │       │
+│  │ • Triggered by Risk Council via multisig     │       │
+│  │ • Sells collateral on open market            │       │
+│  │ • No third party receives dUSDY directly     │       │
+│  │ • autodeleverageEnabled = 1 in market config │       │
 │  └──────────────────────────────────────────────┘       │
 └─────────────────────────────────────────────────────────┘
 ```
