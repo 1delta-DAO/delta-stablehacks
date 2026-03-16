@@ -6,18 +6,18 @@ Delta Mint creates **KYC-gated wrapped tokens** (starting with dUSDY, a 1:1 wrap
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                    Delta Stack                        │
-│                                                       │
+│                    Delta Stack                       │
+│                                                      │
 │  ┌─────────────┐    ┌──────────────────────────────┐ │
-│  │ delta-mint   │    │     Kamino Lend V2           │ │
-│  │ (our program)│    │   (audited infra)            │ │
-│  │              │    │                              │ │
-│  │ • KYC gate   │───▶│ • Permissionless market      │ │
-│  │ • Whitelist  │    │ • Custom reserves            │ │
-│  │ • Conf. Tx   │    │ • Oracle + IR curves         │ │
-│  │ • Mint auth  │    │ • Liquidation engine         │ │
+│  │ delta-mint   │    │     Kamino Lend V2          │ │
+│  │ (our program)│    │   (audited infra)           │ │
+│  │              │    │                             │ │
+│  │ • KYC gate   │───▶│ • Permissionless market     │ │
+│  │ • Whitelist  │    │ • Custom reserves           │ │
+│  │ • Conf. Tx   │    │ • Oracle + IR curves        │ │
+│  │ • Mint auth  │    │ • Liquidation engine        │ │
 │  └─────────────┘    └──────────────────────────────┘ │
-│                                                       │
+│                                                      │
 │  We build this        We use this (as-is)            │
 └──────────────────────────────────────────────────────┘
 ```
