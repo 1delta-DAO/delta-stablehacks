@@ -7,6 +7,8 @@
     "build": "PATH=$HOME/.local/share/solana/install/active_release/bin:$PATH anchor build -p counter && PATH=$HOME/.local/share/solana/install/active_release/bin:$PATH anchor build -p delta_mint && PATH=$HOME/.local/share/solana/install/active_release/bin:$PATH anchor build -p governor",
     "test": "PATH=$HOME/.local/share/solana/install/active_release/bin:$PATH anchor test",
     "test:fork": "ANCHOR_PROVIDER_URL=https://api.mainnet-beta.solana.com PATH=$HOME/.local/share/solana/install/active_release/bin:$PATH anchor test",
+    "test:full-flow": "ANCHOR_PROVIDER_URL=https://api.mainnet-beta.solana.com pnpm ts-mocha -p ./tsconfig.json -t 1000000 tests/kamino-full-flow.fork.ts",
+    "test:full-flow:validator": "bash scripts/test-validator-flow.sh",
     "deploy:devnet": "PATH=$HOME/.local/share/solana/install/active_release/bin:$PATH anchor deploy --provider.cluster devnet",
     "deploy:mainnet": "PATH=$HOME/.local/share/solana/install/active_release/bin:$PATH anchor deploy --provider.cluster mainnet"
   },
@@ -18,6 +20,7 @@
     "@kamino-finance/klend-sdk": "^7.3.20",
     "@solana/spl-token": "^0.4.14",
     "@types/bn.js": "^5.1.0",
+    "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.0",
     "anchor-bankrun": "^0.5.0",
     "chai": "^4.4.0",

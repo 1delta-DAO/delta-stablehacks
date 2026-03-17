@@ -56,15 +56,16 @@ pub mod delta_mint {
         )?;
 
         // 2. Initialize confidential transfer extension on the mint.
-        //    - authority: the program's PDA (can reconfigure later)
-        //    - auto_approve: true (accounts can immediately use confidential transfers)
+        //    - authority: the program's PDA (can approve accounts later)
+        //    - auto_approve: false (authority must approve each account for CT)
+        //      Kamino requires auto_approve=false for liquidity tokens.
         //    - auditor: none (can be set later for compliance auditing)
         invoke(
             &ct_instruction::initialize_mint(
                 ctx.accounts.token_program.key,
                 ctx.accounts.mint.key,
                 Some(ctx.accounts.mint_authority.key()),
-                true,
+                false,
                 None,
             )?,
             &[ctx.accounts.mint.to_account_info()],
