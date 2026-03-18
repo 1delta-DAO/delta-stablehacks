@@ -6,12 +6,19 @@
  *
  * Current implementation: manual approval flow (mock / admin-driven).
  * Production flow: webhook from provider → call approveWallet() internally.
+ *
+ * Approve flow:
+ *   1. KYT screening  — blocks HIGH-risk wallets before any on-chain write
+ *   2. Risk controls  — blocks sanctioned / capped wallets
+ *   3. On-chain whitelist write
  */
 
-import type { KycRecord, KycStatus, SubmitKycBody } from "../types.js";
+import type { KycRecord, SubmitKycBody } from "../types.js";
 import type { KycStore } from "../db/store.js";
 import { createKycStore } from "../db/store.js";
 import { getBlockchainService } from "./blockchain.service.js";
+import { getKytService, type KytService } from "./kyt.service.js";
+import { getRiskControlService, type RiskControlService } from "./risk.service.js";
 
 // ---------------------------------------------------------------------------
 // KYC Provider interface
@@ -55,14 +62,22 @@ class MockKycProvider implements KycProvider {
 export class KycService {
   private readonly store: KycStore;
   private readonly blockchain = getBlockchainService();
+  private readonly kyt: KytService;
+  private readonly risk: RiskControlService;
   private provider: KycProvider;
 
-  constructor(store?: KycStore, provider?: KycProvider) {
+  constructor(
+    store?: KycStore,
+    provider?: KycProvider,
+    kyt?: KytService,
+    risk?: RiskControlService
+  ) {
     this.store = store ?? createKycStore();
     this.provider = provider ?? new MockKycProvider();
+    this.kyt = kyt ?? getKytService();
+    this.risk = risk ?? getRiskControlService();
   }
 
-  /** Swap the KYC provider at runtime (e.g., for testing or feature flags). */
   setProvider(provider: KycProvider): void {
     this.provider = provider;
   }
@@ -114,7 +129,7 @@ export class KycService {
   }
 
   // -------------------------------------------------------------------------
-  // Approve — triggers on-chain whitelist write
+  // Approve — KYT → Risk → on-chain whitelist
   // -------------------------------------------------------------------------
 
   async approveWallet(walletAddress: string): Promise<KycRecord> {
@@ -124,11 +139,28 @@ export class KycService {
       throw new ConflictError(`${walletAddress} is already approved`);
     }
 
-    // Write to on-chain whitelist for every configured pool
+    // 1. KYT screening — blocks HIGH-risk wallets
+    const kytResult = await this.kyt.screenWallet(walletAddress);
+    if (kytResult.riskLevel === "HIGH") {
+      throw new ComplianceError(
+        `KYT: wallet flagged as HIGH risk — flags: ${kytResult.flags.join(", ") || "none"}`
+      );
+    }
+
+    // 2. Risk controls — blacklist, per-wallet cap, pool cap
+    const riskResult = await this.risk.checkWallet(walletAddress);
+    if (!riskResult.passed) {
+      throw new ComplianceError(`Risk: ${riskResult.reason}`);
+    }
+
+    // 3. On-chain whitelist write for every configured pool
     const whitelistResults = await this.blockchain.addToWhitelist(walletAddress);
 
     const updated = this.store.updateStatus(walletAddress, "approved", whitelistResults)!;
     await this.provider.onApprove(updated);
+
+    // 4. Register wallet in risk tracker (deposit amount unknown at approval time)
+    this.risk.recordDeposit(walletAddress, 0);
 
     const sigs = whitelistResults.map((r) => r.signature).join(", ");
     console.log(`[kyc] Approved ${walletAddress} | txs: ${sigs}`);
@@ -177,6 +209,12 @@ export class NotFoundError extends Error {
 export class ConflictError extends Error {
   readonly statusCode = 409;
   constructor(message: string) { super(message); this.name = "ConflictError"; }
+}
+
+/** Thrown when a compliance check (KYT or risk controls) blocks an approval. */
+export class ComplianceError extends Error {
+  readonly statusCode = 403;
+  constructor(message: string) { super(message); this.name = "ComplianceError"; }
 }
 
 // ---------------------------------------------------------------------------
