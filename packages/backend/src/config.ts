@@ -44,6 +44,11 @@ export const config = {
   depositCapUsd: parseInt(process.env.DEPOSIT_CAP_USD ?? "1000000", 10),
   poolCapUsd: parseInt(process.env.POOL_CAP_USD ?? "50000000", 10),
 
+  // Fireblocks (optional — leave blank to use local keypair)
+  fireblocksApiKey: process.env.FIREBLOCKS_API_KEY ?? "",
+  fireblocksVaultAccountId: process.env.FIREBLOCKS_VAULT_ACCOUNT_ID ?? "0",
+  fireblocksSignerPublicKey: process.env.FIREBLOCKS_SIGNER_PUBLIC_KEY ?? "",
+
   // Lazy-loaded to avoid crashing on import during tests
   get adminKeypair(): Keypair {
     return loadAdminKeypair();
