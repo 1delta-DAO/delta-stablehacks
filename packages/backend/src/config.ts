@@ -22,6 +22,7 @@ export const config = {
   deltaMintProgramId:
     process.env.DELTA_MINT_PROGRAM_ID ??
     "3FLEACtqQ2G9h6sc7gLniVfK4maG59Eo4pt8H4A9QggY",
+    
   // Comma-separated list of wrapped mint addresses, one per pool.
   // e.g. WRAPPED_MINT_ADDRESSES=dUSDY_pubkey,dUSDC_pubkey
   wrappedMintAddresses: requireEnv("WRAPPED_MINT_ADDRESSES")
@@ -34,6 +35,12 @@ export const config = {
     max: parseInt(process.env.RATE_LIMIT_MAX ?? "30", 10),
     timeWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? "60000", 10),
   },
+
+  // Risk controls
+  ofacMockList: (process.env.OFAC_MOCK_LIST ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
 
   // Lazy-loaded to avoid crashing on import during tests
   get adminKeypair(): Keypair {

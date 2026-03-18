@@ -25,3 +25,20 @@ export interface SubmitKycBody {
 export interface ApproveRejectBody {
   walletAddress: string;
 }
+
+// ---------------------------------------------------------------------------
+// KYT (Know Your Transaction)
+// ---------------------------------------------------------------------------
+
+export type KytRiskLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export interface KytResult {
+  walletAddress: string;
+  riskLevel: KytRiskLevel;
+  /** Flags from the screening provider, e.g. "SANCTIONS_MATCH", "MIXER" */
+  flags: string[];
+  screenedAt: string; // ISO timestamp
+  /** External reference ID from real provider */
+  providerRef?: string;
+}
+
