@@ -83,10 +83,77 @@ export class KycService {
   }
 
   // -------------------------------------------------------------------------
-  // Submit
+  // Register from Entra — primary user-facing entry point
   // -------------------------------------------------------------------------
 
-  async submitKyc(body: SubmitKycBody): Promise<KycRecord> {
+  /**
+   * Primary onboarding path. Called after the user authenticates with Entra B2C.
+   * Name and email are pulled directly from the verified JWT claims — the user
+   * never fills out a form. Creates a KYC record with entraSubjectId already
+   * set and status "pending" for compliance officer review.
+   *
+   * Idempotent: if the wallet is already registered with this sub, returns the
+   * existing record unchanged.
+   */
+  async registerFromEntra(
+    walletAddress: string,
+    entraSubjectId: string,
+    claims: { name?: string; given_name?: string; family_name?: string; emails?: string[]; email?: string }
+  ): Promise<KycRecord> {
+    if (!this.blockchain.validateAddress(walletAddress)) {
+      throw new ValidationError("Invalid Solana wallet address");
+    }
+
+    // Idempotent — already registered with same sub, just return existing record
+    const existingByWallet = this.store.findByWallet(walletAddress);
+    if (existingByWallet?.entraSubjectId === entraSubjectId) {
+      return existingByWallet;
+    }
+
+    // Same Entra identity trying to claim a different wallet
+    const existingBySub = this.store.findByEntraSub(entraSubjectId);
+    if (existingBySub && existingBySub.walletAddress !== walletAddress) {
+      throw new ConflictError(
+        `This Entra identity is already linked to wallet ${existingBySub.walletAddress}`
+      );
+    }
+
+    // Wallet already registered but without an Entra sub — link it now
+    if (existingByWallet && !existingByWallet.entraSubjectId) {
+      return this.store.linkEntraSub(walletAddress, entraSubjectId)!;
+    }
+
+    // Wallet already registered with a different Entra identity
+    if (existingByWallet) {
+      throw new ConflictError(
+        `Wallet ${walletAddress} is already linked to a different Entra identity`
+      );
+    }
+
+    const name =
+      claims.name ??
+      ([claims.given_name, claims.family_name].filter(Boolean).join(" ") || "Unknown");
+    const email =
+      claims.emails?.[0] ?? (claims.email as string | undefined) ?? "";
+
+    const record = this.store.create({
+      walletAddress,
+      entityType: "individual",
+      name,
+      email,
+      status: "pending",
+      entraSubjectId,
+    });
+
+    await this.provider.onSubmit(record);
+    return record;
+  }
+
+  // -------------------------------------------------------------------------
+  // Submit — admin / manual onboarding only
+  // -------------------------------------------------------------------------
+
+  async submitKyc(body: SubmitKycBody, entraSubjectId?: string): Promise<KycRecord> {
     if (!this.blockchain.validateAddress(body.walletAddress)) {
       throw new ValidationError("Invalid Solana wallet address");
     }
@@ -96,6 +163,16 @@ export class KycService {
       throw new ConflictError(
         `KYC already submitted for ${body.walletAddress} (status: ${existing.status})`
       );
+    }
+
+    // Prevent one Entra identity from being linked to multiple wallets
+    if (entraSubjectId) {
+      const existingBySub = this.store.findByEntraSub(entraSubjectId);
+      if (existingBySub) {
+        throw new ConflictError(
+          `This Entra identity is already linked to wallet ${existingBySub.walletAddress}`
+        );
+      }
     }
 
     if (!["individual", "company"].includes(body.entityType)) {
@@ -112,6 +189,7 @@ export class KycService {
       name: body.name.trim(),
       email: body.email.trim().toLowerCase(),
       status: "pending",
+      entraSubjectId,
     });
 
     await this.provider.onSubmit(record);

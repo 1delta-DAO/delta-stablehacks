@@ -19,8 +19,6 @@
 import type { FastifyInstance } from "fastify";
 import { requireEntraAuth } from "../middleware/entra-auth.js";
 import { getKycService, NotFoundError } from "../services/kyc.service.js";
-import { EntraService } from "../services/entra.service.js";
-import { getBlockchainService } from "../services/blockchain.service.js";
 
 interface LinkWalletBody {
   walletAddress: string;
@@ -28,10 +26,12 @@ interface LinkWalletBody {
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   const kycSvc = getKycService();
-  const blockchain = getBlockchainService();
 
   // -------------------------------------------------------------------------
   // POST /auth/link-wallet
+  // Primary user onboarding endpoint. User only provides their wallet address —
+  // name, email, and identity are pulled directly from the verified Entra token.
+  //
   // Requires: Authorization: Bearer <entra_token>
   // Body:     { walletAddress: string }
   // -------------------------------------------------------------------------
@@ -46,49 +46,24 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(400).send({ success: false, error: "walletAddress is required" });
       }
 
-      if (!blockchain.validateAddress(walletAddress)) {
-        return reply.status(400).send({ success: false, error: "Invalid Solana wallet address" });
-      }
-
-      // Prevent one Entra identity from claiming multiple wallets
-      const existingBySub = kycSvc.findByEntraSub(claims.sub);
-      if (existingBySub && existingBySub.walletAddress !== walletAddress) {
-        return reply.status(409).send({
-          success: false,
-          error: `This Entra identity is already linked to wallet ${existingBySub.walletAddress}`,
+      try {
+        const record = await kycSvc.registerFromEntra(walletAddress, claims.sub, claims);
+        return reply.status(200).send({
+          success: true,
+          data: {
+            walletAddress: record.walletAddress,
+            entraSubjectId: record.entraSubjectId,
+            kycStatus: record.status,
+            message: record.status === "approved"
+              ? "Already approved. Wallet is whitelisted."
+              : "Registered. Pending compliance review.",
+          },
         });
+      } catch (err) {
+        const status = (err as any).statusCode ?? 500;
+        const message = err instanceof Error ? err.message : "Internal server error";
+        return reply.status(status).send({ success: false, error: message });
       }
-
-      // Ensure a KYC record exists for the wallet before linking
-      let kycRecord = kycSvc.getStatusOrNull(walletAddress);
-      if (!kycRecord) {
-        // Auto-create a stub KYC record from the Entra claims so the compliance
-        // team can approve it — they now have a verified institutional identity anchor.
-        const email = EntraService.extractEmail(claims) ?? "";
-        const name = claims.name ?? [claims.given_name, claims.family_name].filter(Boolean).join(" ") ?? "Unknown";
-
-        kycRecord = await kycSvc.submitKyc({
-          walletAddress,
-          entityType: "individual",
-          name,
-          email,
-        });
-      }
-
-      const linked = kycSvc.linkEntraSub(walletAddress, claims.sub);
-      if (!linked) {
-        return reply.status(500).send({ success: false, error: "Failed to link identity" });
-      }
-
-      return reply.status(200).send({
-        success: true,
-        data: {
-          walletAddress,
-          entraSubjectId: claims.sub,
-          kycStatus: linked.status,
-          message: "Entra identity linked to wallet. KYC review is pending.",
-        },
-      });
     }
   );
 

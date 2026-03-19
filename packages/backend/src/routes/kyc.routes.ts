@@ -6,7 +6,7 @@ import {
   ConflictError,
   ComplianceError,
 } from "../services/kyc.service.js";
-import { requireEntraAuth, requireEntraAdmin } from "../middleware/entra-auth.js";
+import { requireEntraAdmin } from "../middleware/entra-auth.js";
 import type { SubmitKycBody, ApproveRejectBody } from "../types.js";
 
 function errorResponse(err: unknown): { statusCode: number; error: string } {
@@ -28,7 +28,10 @@ export async function kycRoutes(app: FastifyInstance): Promise<void> {
   // -------------------------------------------------------------------------
   // POST /kyc/submit
   // -------------------------------------------------------------------------
-  app.post<{ Body: SubmitKycBody }>("/kyc/submit", { preHandler: requireEntraAuth }, async (req, reply) => {
+  // Admin-only manual onboarding — for edge cases where a wallet needs to be
+  // registered without going through the Entra flow.
+  // Normal users should use POST /auth/link-wallet instead.
+  app.post<{ Body: SubmitKycBody }>("/kyc/submit", { preHandler: requireEntraAdmin }, async (req, reply) => {
     try {
       const record = await svc.submitKyc(req.body, req.entraUser?.sub);
       return reply.status(201).send({ success: true, data: record });
