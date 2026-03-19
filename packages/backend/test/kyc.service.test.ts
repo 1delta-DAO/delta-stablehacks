@@ -129,4 +129,79 @@ describe("KycService", () => {
       expect(svc.listAll()).toHaveLength(2);
     });
   });
+
+  describe("registerFromEntra", () => {
+    const SUB = "entra-sub-abc123";
+    const CLAIMS = {
+      name: "Alice Smith",
+      emails: ["alice@aminabank.com"],
+    };
+
+    it("creates a pending record with entraSubjectId linked", async () => {
+      const record = await svc.registerFromEntra(VALID_WALLET, SUB, CLAIMS);
+      expect(record.status).toBe("pending");
+      expect(record.walletAddress).toBe(VALID_WALLET);
+      expect(record.entraSubjectId).toBe(SUB);
+      expect(record.name).toBe("Alice Smith");
+      expect(record.email).toBe("alice@aminabank.com");
+    });
+
+    it("is idempotent — returns existing record if same sub+wallet called again", async () => {
+      const first = await svc.registerFromEntra(VALID_WALLET, SUB, CLAIMS);
+      const second = await svc.registerFromEntra(VALID_WALLET, SUB, CLAIMS);
+      expect(second.walletAddress).toBe(first.walletAddress);
+      expect(second.entraSubjectId).toBe(first.entraSubjectId);
+      expect(svc.listAll()).toHaveLength(1);
+    });
+
+    it("falls back to given_name + family_name when name claim is absent", async () => {
+      const record = await svc.registerFromEntra(VALID_WALLET, SUB, {
+        given_name: "Alice",
+        family_name: "Smith",
+        emails: ["alice@aminabank.com"],
+      });
+      expect(record.name).toBe("Alice Smith");
+    });
+
+    it("falls back to 'Unknown' when no name claims are present", async () => {
+      const record = await svc.registerFromEntra(VALID_WALLET, SUB, {});
+      expect(record.name).toBe("Unknown");
+    });
+
+    it("throws ConflictError when same sub tries to claim a different wallet", async () => {
+      await svc.registerFromEntra(VALID_WALLET, SUB, CLAIMS);
+      await expect(
+        svc.registerFromEntra(VALID_WALLET_2, SUB, CLAIMS)
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it("throws ConflictError when wallet is already linked to a different sub", async () => {
+      await svc.registerFromEntra(VALID_WALLET, SUB, CLAIMS);
+      await expect(
+        svc.registerFromEntra(VALID_WALLET, "different-sub-456", CLAIMS)
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it("links sub to existing wallet that has no entraSubjectId yet", async () => {
+      await svc.submitKyc({
+        walletAddress: VALID_WALLET,
+        entityType: "individual",
+        name: "Alice",
+        email: "alice@aminabank.com",
+      });
+      const record = await svc.registerFromEntra(VALID_WALLET, SUB, CLAIMS);
+      expect(record.entraSubjectId).toBe(SUB);
+    });
+
+    it("throws ValidationError for invalid wallet address", async () => {
+      await expect(
+        svc.registerFromEntra("not-a-valid-wallet!!", SUB, CLAIMS)
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it("findByEntraSub returns the record after registration", async () => {
+      await svc.registerFromEntra(VALID_WALLET, SUB, CLAIMS);
+      expect(svc.findByEntraSub(SUB)?.walletAddress).toBe(VALID_WALLET);
+    });
+  });
 });
