@@ -22,7 +22,7 @@
  *     Issuer: https://{tenantId}.ciamlogin.com/{tenantId}/v2.0/
  */
 
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
+import { createRemoteJWKSet, jwtVerify, decodeJwt, type JWTPayload } from "jose";
 import { config } from "../config.js";
 
 export interface EntraTokenClaims extends JWTPayload {
@@ -38,6 +38,11 @@ export interface EntraTokenClaims extends JWTPayload {
   given_name?: string;
   /** Surname. */
   family_name?: string;
+  /**
+   * App roles assigned in Azure portal → App registrations → App roles.
+   * e.g. ["VaultAdmin"] for compliance officers.
+   */
+  roles?: string[];
 }
 
 export class EntraService {
@@ -70,8 +75,35 @@ export class EntraService {
   /**
    * Validate a raw Bearer token and return the verified claims.
    * Throws if the token is invalid, expired, or from the wrong issuer/audience.
+   *
+   * When ENTRA_MOCK=true: skips signature verification and decodes the token
+   * as-is. If the token is not a valid JWT, returns hardcoded mock claims.
+   * Never use mock mode in production.
    */
   async validateToken(rawToken: string): Promise<EntraTokenClaims> {
+    if (config.entraMock) {
+      try {
+        const payload = decodeJwt(rawToken);
+        if (!payload.sub) throw new Error("no sub");
+        console.warn("[entra:mock] Skipping signature verification — ENTRA_MOCK=true");
+        return payload as EntraTokenClaims;
+      } catch {
+        // Token is not a real JWT — return hardcoded mock claims for local dev
+        console.warn("[entra:mock] Invalid JWT, returning mock claims");
+        return {
+          sub: "mock-sub-local-dev",
+          oid: "mock-oid-local-dev",
+          name: "Mock Compliance Officer",
+          emails: ["compliance@mock.local"],
+          roles: ["VaultAdmin"],
+          iss: "mock",
+          aud: "mock",
+          iat: Math.floor(Date.now() / 1000),
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        };
+      }
+    }
+
     const { payload } = await jwtVerify(rawToken, this.jwks, {
       issuer: this.issuer,
       audience: this.audience,
