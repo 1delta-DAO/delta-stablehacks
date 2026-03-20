@@ -8,7 +8,6 @@ export const DEVNET_CONFIG = {
     deltaMint: new PublicKey("13Su8nR5NBzQ7UwFFUiNAH1zH5DQtLyjezhbwRREQkEn"),
     governor: new PublicKey("BrZYcbPBt9nW4b6xUSodwXRfAfRNZTCzthp1ywMG3KJh"),
     klend: new PublicKey("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD"),
-    civicGateway: new PublicKey("gatem74V238djXdzWnJf94Wo1DcnuGkfijbf3AXBi1cT"),
   },
 
   pool: {
@@ -19,9 +18,9 @@ export const DEVNET_CONFIG = {
     dmMintAuthority: new PublicKey("DWat3MjbT3HmHjwutDKqN9ooSNtVyFVgfTm3gs7drYS2"),
   },
 
-  // USDC on devnet (our test mint from deploy pipeline)
+  // USDC on devnet — the test mint used by the klend reserve (we control mint authority)
   usdc: {
-    mint: new PublicKey("8iBux2LRja1PhVZph8Rw4Hi45pgkaufNEiaZma5nTD5g"),
+    mint: new PublicKey("2tboZ672zptawbXLUrcqfF7YkkS1kzDS4ewwxtjuog1G"),
     decimals: 6,
   },
 
@@ -32,9 +31,11 @@ export const DEVNET_CONFIG = {
 
   // Lending market
   market: {
-    // These get populated after deploy:all:devnet
     lendingMarket: new PublicKey("45FNL648aXgbMoMzLfYE2vCZAtWWDCky2tYLCEUztc98"),
     usdcReserve: new PublicKey("D4qXufDqBjU5iTbVMHfdxDrpYnz31sed1oQCJbWoVGmH"),
+    usdcOracle: new PublicKey("HSi8jh6q9XrbMrHi84G2QFafS3sfuo23hewTNBVPQ9EF"),
+    dUsdyReserve: new PublicKey("HoEa26bHi96mwAu3joQZKcyxhG9jXyJvaxLNuvjcwZmw"),
+    dUsdyOracle: new PublicKey("E4pitSrZV9MWSspahe2vr26Cwsn3podnvHvW3cuT74R4"),
   },
 };
 

@@ -1,27 +1,14 @@
-import { useState, useEffect } from "react";
-import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import type { DeploymentConfig } from "../config/devnet";
 
 interface PortfolioCardProps {
   usdcBalance: number | null;
-  config: DeploymentConfig;
+  depositedUsdc: number;
+  supplyAPY: number;
 }
 
-export function PortfolioCard({ usdcBalance, config }: PortfolioCardProps) {
-  const { publicKey } = useWallet();
-  const { connection } = useConnection();
-  const [depositedAmount, setDepositedAmount] = useState<number | null>(null);
-
-  // Check if user has cTokens (klend receipt tokens) indicating deposits
-  useEffect(() => {
-    if (!publicKey) return;
-    // For now, show a placeholder — actual klend cToken balance would be fetched here
-    setDepositedAmount(0);
-  }, [publicKey, connection]);
-
-  const totalValue = (usdcBalance || 0) + (depositedAmount || 0);
-  const earnedYield = depositedAmount ? depositedAmount * 0.042 / 365 * 30 : 0; // ~30 days of yield
+export function PortfolioCard({ usdcBalance, depositedUsdc, supplyAPY }: PortfolioCardProps) {
+  const totalValue = (usdcBalance || 0) + depositedUsdc;
+  const monthlyYield = depositedUsdc * supplyAPY / 12;
 
   return (
     <div style={styles.card}>
@@ -37,7 +24,7 @@ export function PortfolioCard({ usdcBalance, config }: PortfolioCardProps) {
       <div style={styles.row}>
         <span style={styles.label}>Deposited</span>
         <span style={styles.value}>
-          ${depositedAmount !== null ? depositedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "—"}
+          ${depositedUsdc.toLocaleString(undefined, { minimumFractionDigits: 2 })}
         </span>
       </div>
 
@@ -48,12 +35,10 @@ export function PortfolioCard({ usdcBalance, config }: PortfolioCardProps) {
         </span>
       </div>
 
-      {depositedAmount !== null && depositedAmount > 0 && (
+      {depositedUsdc > 0 && (
         <div style={styles.yieldBox}>
-          <span style={styles.yieldLabel}>Estimated monthly yield</span>
-          <span style={styles.yieldValue}>
-            +${earnedYield.toFixed(2)}
-          </span>
+          <span style={styles.yieldLabel}>Est. monthly yield ({(supplyAPY * 100).toFixed(1)}% APY)</span>
+          <span style={styles.yieldValue}>+${monthlyYield.toFixed(2)}</span>
         </div>
       )}
 
@@ -66,45 +51,15 @@ export function PortfolioCard({ usdcBalance, config }: PortfolioCardProps) {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  card: {
-    background: "#111827",
-    border: "1px solid #1f2937",
-    borderRadius: 12,
-    padding: "24px",
-  },
+  card: { background: "#111827", border: "1px solid #1f2937", borderRadius: 12, padding: "24px" },
   title: { fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 20 },
-  row: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
+  row: { display: "flex", justifyContent: "space-between", marginBottom: 12 },
   label: { fontSize: 14, color: "#9ca3af" },
   value: { fontSize: 14, color: "#d1d5db", fontFamily: "monospace" },
-  yieldBox: {
-    background: "#0d2818",
-    border: "1px solid #166534",
-    borderRadius: 8,
-    padding: "12px 16px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 16,
-  },
+  yieldBox: { background: "#0d2818", border: "1px solid #166534", borderRadius: 8, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 },
   yieldLabel: { fontSize: 12, color: "#4ade80" },
   yieldValue: { fontSize: 16, fontWeight: 700, color: "#4ade80" },
-  statusRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 20,
-    paddingTop: 12,
-    borderTop: "1px solid #1f2937",
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: "50%",
-    background: "#4ade80",
-  },
+  statusRow: { display: "flex", alignItems: "center", gap: 8, marginTop: 20, paddingTop: 12, borderTop: "1px solid #1f2937" },
+  statusDot: { width: 8, height: 8, borderRadius: "50%", background: "#4ade80" },
   statusText: { fontSize: 12, color: "#4ade80" },
 };
