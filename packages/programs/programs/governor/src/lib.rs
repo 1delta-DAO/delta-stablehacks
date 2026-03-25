@@ -53,6 +53,9 @@ pub mod governor {
             params.decimals,
         )?;
 
+        // NOTE: delta-mint authority is initially the deployer.
+        // Call `activate_wrapping` after whitelisting to transfer authority to pool PDA.
+
         emit!(PoolCreatedEvent {
             pool: pool_key,
             underlying_mint: underlying_key,
@@ -261,6 +264,140 @@ pub mod governor {
         Ok(())
     }
 
+    /// Wrap underlying tokens into d-tokens (KYC-wrapped).
+    /// User deposits underlying tokens (e.g., tUSDY) into the pool vault,
+    /// and receives an equal amount of d-tokens (e.g., dtUSDY) in return.
+    /// Requires the user to be KYC-whitelisted.
+    pub fn wrap(ctx: Context<WrapTokens>, amount: u64) -> Result<()> {
+        require!(
+            ctx.accounts.pool_config.status == PoolStatus::Active,
+            GovernorError::PoolNotActive
+        );
+        require!(amount > 0, GovernorError::InvalidPoolStatus);
+
+        // 1. Transfer underlying tokens from user → vault
+        token_interface::transfer_checked(
+            CpiContext::new(
+                ctx.accounts.underlying_token_program.to_account_info(),
+                token_interface::TransferChecked {
+                    from: ctx.accounts.user_underlying_ata.to_account_info(),
+                    mint: ctx.accounts.underlying_mint.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                    authority: ctx.accounts.user.to_account_info(),
+                },
+            ),
+            amount,
+            ctx.accounts.pool_config.decimals,
+        )?;
+
+        // 2. Mint d-tokens to user via delta-mint CPI
+        let underlying = ctx.accounts.pool_config.underlying_mint;
+        let bump = ctx.accounts.pool_config.bump;
+        let seeds = &[b"pool".as_ref(), underlying.as_ref(), &[bump]];
+
+        // The pool_config PDA is the authority on the delta-mint MintConfig
+        // (set during initialize_pool). We CPI as the pool PDA.
+        delta_cpi::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.delta_mint_program.to_account_info(),
+                delta_accounts::MintTokens {
+                    authority: ctx.accounts.pool_config.to_account_info(),
+                    mint_config: ctx.accounts.dm_mint_config.to_account_info(),
+                    mint: ctx.accounts.wrapped_mint.to_account_info(),
+                    mint_authority: ctx.accounts.dm_mint_authority.to_account_info(),
+                    whitelist_entry: ctx.accounts.whitelist_entry.to_account_info(),
+                    destination: ctx.accounts.user_wrapped_ata.to_account_info(),
+                    token_program: ctx.accounts.wrapped_token_program.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+        )?;
+
+        emit!(WrapEvent {
+            pool: ctx.accounts.pool_config.key(),
+            user: ctx.accounts.user.key(),
+            underlying_amount: amount,
+            wrapped_amount: amount,
+        });
+
+        Ok(())
+    }
+
+    /// Unwrap d-tokens back into underlying tokens.
+    /// User burns d-tokens and receives underlying tokens from the vault.
+    /// Requires the user to be KYC-whitelisted.
+    pub fn unwrap(ctx: Context<UnwrapTokens>, amount: u64) -> Result<()> {
+        require!(
+            ctx.accounts.pool_config.status == PoolStatus::Active,
+            GovernorError::PoolNotActive
+        );
+        require!(amount > 0, GovernorError::InvalidPoolStatus);
+
+        // 1. Burn d-tokens from user
+        token_interface::burn(
+            CpiContext::new(
+                ctx.accounts.wrapped_token_program.to_account_info(),
+                token_interface::Burn {
+                    mint: ctx.accounts.wrapped_mint.to_account_info(),
+                    from: ctx.accounts.user_wrapped_ata.to_account_info(),
+                    authority: ctx.accounts.user.to_account_info(),
+                },
+            ),
+            amount,
+        )?;
+
+        // 2. Transfer underlying from vault → user (pool PDA owns the vault, signs)
+        let underlying = ctx.accounts.pool_config.underlying_mint;
+        let bump = ctx.accounts.pool_config.bump;
+        let pool_seeds = &[b"pool".as_ref(), underlying.as_ref(), &[bump]];
+
+        token_interface::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.underlying_token_program.to_account_info(),
+                token_interface::TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    mint: ctx.accounts.underlying_mint.to_account_info(),
+                    to: ctx.accounts.user_underlying_ata.to_account_info(),
+                    authority: ctx.accounts.pool_config.to_account_info(),
+                },
+                &[pool_seeds],
+            ),
+            amount,
+            ctx.accounts.pool_config.decimals,
+        )?;
+
+        emit!(UnwrapEvent {
+            pool: ctx.accounts.pool_config.key(),
+            user: ctx.accounts.user.key(),
+            underlying_amount: amount,
+            wrapped_amount: amount,
+        });
+
+        Ok(())
+    }
+
+    /// Transfer delta-mint authority from deployer → pool PDA.
+    /// This enables the wrap/unwrap flow. Call AFTER whitelisting is done.
+    /// Only the root authority (current delta-mint authority) can call this.
+    pub fn activate_wrapping(ctx: Context<ActivateWrapping>) -> Result<()> {
+        let pool_key = ctx.accounts.pool_config.key();
+
+        delta_cpi::transfer_authority(
+            CpiContext::new(
+                ctx.accounts.delta_mint_program.to_account_info(),
+                delta_accounts::TransferAuthority {
+                    authority: ctx.accounts.authority.to_account_info(),
+                    mint_config: ctx.accounts.dm_mint_config.to_account_info(),
+                },
+            ),
+            pool_key,
+        )?;
+
+        msg!("Delta-mint authority transferred to pool PDA: {}", pool_key);
+        Ok(())
+    }
+
     /// Freeze or unfreeze the pool. Only root authority.
     pub fn set_pool_status(ctx: Context<RootOnly>, status: PoolStatus) -> Result<()> {
         ctx.accounts.pool_config.status = status;
@@ -446,7 +583,109 @@ pub struct SelfRegister<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Mint wrapped tokens — root authority OR admin.
+/// Activate wrapping — transfers delta-mint authority to pool PDA.
+#[derive(Accounts)]
+pub struct ActivateWrapping<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(has_one = authority)]
+    pub pool_config: Account<'info, PoolConfig>,
+
+    /// CHECK: delta-mint MintConfig — authority validated by delta-mint CPI.
+    #[account(mut, address = pool_config.dm_mint_config)]
+    pub dm_mint_config: UncheckedAccount<'info>,
+
+    pub delta_mint_program: Program<'info, DeltaMintProgram>,
+}
+
+/// Wrap underlying → d-tokens. Any whitelisted user can call this.
+/// The vault is a token account owned by the pool PDA.
+#[derive(Accounts)]
+pub struct WrapTokens<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"pool", pool_config.underlying_mint.as_ref()],
+        bump = pool_config.bump,
+    )]
+    pub pool_config: Account<'info, PoolConfig>,
+
+    /// The underlying token mint (e.g., tUSDY). Must match pool_config.
+    #[account(address = pool_config.underlying_mint)]
+    pub underlying_mint: InterfaceAccount<'info, token_interface::Mint>,
+
+    /// User's token account for the underlying (source).
+    #[account(mut)]
+    pub user_underlying_ata: InterfaceAccount<'info, token_interface::TokenAccount>,
+
+    /// Pool vault — token account for underlying, owned by pool PDA.
+    /// CHECK: Validated by constraint. Created externally before first wrap.
+    #[account(mut)]
+    pub vault: InterfaceAccount<'info, token_interface::TokenAccount>,
+
+    /// CHECK: delta-mint MintConfig — address validated.
+    #[account(address = pool_config.dm_mint_config)]
+    pub dm_mint_config: UncheckedAccount<'info>,
+
+    /// CHECK: Wrapped Token-2022 mint — address validated.
+    #[account(mut, address = pool_config.wrapped_mint)]
+    pub wrapped_mint: UncheckedAccount<'info>,
+
+    /// CHECK: delta-mint mint authority PDA.
+    pub dm_mint_authority: UncheckedAccount<'info>,
+
+    /// CHECK: User's whitelist entry — validated by delta-mint CPI.
+    pub whitelist_entry: UncheckedAccount<'info>,
+
+    /// CHECK: User's d-token ATA (destination for minted d-tokens).
+    #[account(mut)]
+    pub user_wrapped_ata: UncheckedAccount<'info>,
+
+    pub delta_mint_program: Program<'info, DeltaMintProgram>,
+    pub underlying_token_program: Interface<'info, token_interface::TokenInterface>,
+    pub wrapped_token_program: Interface<'info, token_interface::TokenInterface>,
+}
+
+/// Unwrap d-tokens → underlying tokens.
+#[derive(Accounts)]
+pub struct UnwrapTokens<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    #[account(
+        seeds = [b"pool", pool_config.underlying_mint.as_ref()],
+        bump = pool_config.bump,
+    )]
+    pub pool_config: Account<'info, PoolConfig>,
+
+    /// The underlying token mint.
+    #[account(address = pool_config.underlying_mint)]
+    pub underlying_mint: InterfaceAccount<'info, token_interface::Mint>,
+
+    /// User's underlying token account (destination).
+    #[account(mut)]
+    pub user_underlying_ata: InterfaceAccount<'info, token_interface::TokenAccount>,
+
+    /// Pool vault — underlying tokens transferred out.
+    #[account(mut)]
+    pub vault: InterfaceAccount<'info, token_interface::TokenAccount>,
+
+    /// Wrapped Token-2022 mint (tokens burned from user).
+    #[account(mut, address = pool_config.wrapped_mint)]
+    pub wrapped_mint: InterfaceAccount<'info, token_interface::Mint>,
+
+    /// User's d-token account (source — burned).
+    #[account(mut)]
+    pub user_wrapped_ata: InterfaceAccount<'info, token_interface::TokenAccount>,
+
+    pub underlying_token_program: Interface<'info, token_interface::TokenInterface>,
+    pub wrapped_token_program: Interface<'info, token_interface::TokenInterface>,
+}
+
+/// Mint wrapped tokens — root authority OR admin (legacy, mints without backing).
 #[derive(Accounts)]
 pub struct MintWrapped<'info> {
     #[account(mut)]
@@ -563,6 +802,22 @@ pub struct SelfRegisterEvent {
     pub pool: Pubkey,
     pub wallet: Pubkey,
     pub gatekeeper_network: Pubkey,
+}
+
+#[event]
+pub struct WrapEvent {
+    pub pool: Pubkey,
+    pub user: Pubkey,
+    pub underlying_amount: u64,
+    pub wrapped_amount: u64,
+}
+
+#[event]
+pub struct UnwrapEvent {
+    pub pool: Pubkey,
+    pub user: Pubkey,
+    pub underlying_amount: u64,
+    pub wrapped_amount: u64,
 }
 
 // ---------------------------------------------------------------------------

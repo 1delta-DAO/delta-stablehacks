@@ -68,51 +68,39 @@ export function FaucetCard({ usdcBalance, onMinted }: Props) {
   const hasEnough = (usdcBalance ?? 0) >= 10;
 
   return (
-    <div style={{
-      background: "#1a1a2e", borderRadius: 12, padding: 24,
-      border: "1px solid #2a2a4e",
-    }}>
-      <h3 style={{ margin: "0 0 8px", fontSize: 16, color: "#e0e0e0" }}>
-        Test USDC Faucet
-      </h3>
-      <p style={{ margin: "0 0 16px", fontSize: 13, color: "#888" }}>
-        Get free test USDC to try depositing. Devnet only.
-      </p>
+    <div className="card bg-base-200 border border-base-300 shadow-xl">
+      <div className="card-body p-6 gap-4">
+        <h3 className="card-title text-lg">Test USDC Faucet</h3>
+        <p className="text-sm opacity-50 mb-4">
+          Get free test USDC to try depositing. Devnet only.
+        </p>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ fontSize: 14, color: "#aaa" }}>
-          Balance: <span style={{ color: "#fff", fontWeight: 600 }}>
-            {usdcBalance !== null ? `${usdcBalance.toFixed(2)} USDC` : "—"}
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="text-sm opacity-70">
+            Balance:{" "}
+            <span className="text-base-content font-semibold">
+              {usdcBalance !== null ? `${usdcBalance.toFixed(2)} USDC` : "\u2014"}
+            </span>
+          </div>
+
+          <button
+            onClick={requestUsdc}
+            disabled={status === "minting" || hasEnough}
+            className={`btn ml-auto ${hasEnough ? "btn-disabled opacity-40" : "btn-primary"}`}
+          >
+            {status === "minting" ? "Minting..." :
+             status === "success" ? "Done!" :
+             hasEnough ? "Funded" :
+             "Get 1,000 USDC"}
+          </button>
         </div>
 
-        <button
-          onClick={requestUsdc}
-          disabled={status === "minting" || hasEnough}
-          style={{
-            marginLeft: "auto",
-            padding: "8px 20px",
-            borderRadius: 8,
-            border: "none",
-            background: hasEnough ? "#333" : "#4a90d9",
-            color: hasEnough ? "#666" : "#fff",
-            fontWeight: 600,
-            cursor: hasEnough ? "default" : "pointer",
-            fontSize: 14,
-          }}
-        >
-          {status === "minting" ? "Minting..." :
-           status === "success" ? "Done!" :
-           hasEnough ? "Funded" :
-           "Get 1,000 USDC"}
-        </button>
+        {status === "error" && (
+          <div className="text-error text-xs mt-2">
+            {error || "Failed to mint. Is the faucet server running? (pnpm faucet:serve)"}
+          </div>
+        )}
       </div>
-
-      {status === "error" && (
-        <div style={{ marginTop: 8, fontSize: 12, color: "#ff6b6b" }}>
-          {error || "Failed to mint. Is the faucet server running? (pnpm faucet:serve)"}
-        </div>
-      )}
     </div>
   );
 }

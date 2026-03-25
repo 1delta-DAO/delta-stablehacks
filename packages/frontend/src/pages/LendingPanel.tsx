@@ -266,93 +266,90 @@ export default function LendingPanel() {
   if (!connected) {
     return (
       <Card title="Connect Wallet">
-        <p style={{ color: "#888" }}>Connect your wallet to access lending operations.</p>
+        <p className="opacity-50">Connect your wallet to access lending operations.</p>
       </Card>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="flex flex-col gap-6">
       {status && (
-        <div style={{
-          padding: "10px 16px", borderRadius: 6, fontSize: 13, fontFamily: "monospace", wordBreak: "break-all",
-          background: status.type === "ok" ? "#1a3a1a" : status.type === "err" ? "#3a1a1a" : "#1a1a3a",
-          border: `1px solid ${status.type === "ok" ? "#4caf50" : status.type === "err" ? "#f44336" : "#4a9eff"}`,
-          color: status.type === "ok" ? "#4caf50" : status.type === "err" ? "#f44336" : "#4a9eff",
-        }}>
+        <div className={`alert font-mono text-sm break-all ${status.type === "ok" ? "alert-success" : status.type === "err" ? "alert-error" : "alert-info"}`}>
           {status.msg}
         </div>
       )}
 
       <Card title="Your Position">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, textAlign: "center" }}>
+        <div className="grid grid-cols-4 gap-4 text-center">
           <StatBox label="dUSDY Balance" value={dUsdyBalance ?? "..."} unit="dUSDY" />
           <StatBox label="USDC Balance" value={usdcBalance ?? "..."} unit="USDC" />
-          <StatBox label="KYC Status" value={isWhitelisted ? "Approved" : "Not KYC'd"} color={isWhitelisted ? "#4caf50" : "#f44336"} />
-          <StatBox label="Obligation" value={obligationAddr ? "Active" : "None"} color={obligationAddr ? "#4caf50" : "#888"} />
+          <StatBox label="KYC Status" value={isWhitelisted ? "Approved" : "Not KYC'd"} colorClass={isWhitelisted ? "text-success" : "text-error"} />
+          <StatBox label="Obligation" value={obligationAddr ? "Active" : "None"} colorClass={obligationAddr ? "text-success" : "opacity-40"} />
         </div>
       </Card>
 
       {!isWhitelisted && isWhitelisted !== null && (
-        <div style={{ padding: "12px 16px", borderRadius: 6, background: "#3a2a1a", border: "1px solid #ff9800", color: "#ff9800", fontSize: 13 }}>
+        <div className="alert alert-warning text-sm">
           Your wallet is not KYC-whitelisted. Contact the market administrator.
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="grid grid-cols-2 gap-4">
         <Card title="Deposit dUSDY Collateral">
-          <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px" }}>
+          <p className="text-sm opacity-50 mb-3">
             Deposit dUSDY as collateral to borrow USDC. Creates an obligation if needed.
           </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input placeholder="Amount" value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} style={inputStyle} type="number" />
-            <ActionButton label={loading ? "..." : "Deposit"} color="#4caf50" onClick={handleDeposit} disabled={loading} />
+          <div className="flex gap-3">
+            <input placeholder="Amount" value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} className="input input-bordered flex-1 font-mono" type="number" />
+            <ActionButton label={loading ? "..." : "Deposit"} variant="success" onClick={handleDeposit} disabled={loading} />
           </div>
           <MaxButton label={`Wallet: ${dUsdyBalance ?? "—"} dUSDY`} onClick={() => setDepositAmt(dUsdyBalance || "")} />
         </Card>
 
         <Card title="Borrow USDC">
-          <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px" }}>
+          <p className="text-sm opacity-50 mb-3">
             Borrow USDC against your dUSDY collateral (75% LTV).
           </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input placeholder="Amount" value={borrowAmt} onChange={(e) => setBorrowAmt(e.target.value)} style={inputStyle} type="number" />
-            <ActionButton label={loading ? "..." : "Borrow"} color="#ff9800" onClick={handleBorrow} disabled={loading || !obligationAddr} />
+          <div className="flex gap-3">
+            <input placeholder="Amount" value={borrowAmt} onChange={(e) => setBorrowAmt(e.target.value)} className="input input-bordered flex-1 font-mono" type="number" />
+            <ActionButton label={loading ? "..." : "Borrow"} variant="warning" onClick={handleBorrow} disabled={loading || !obligationAddr} />
           </div>
-          {!obligationAddr && <p style={{ fontSize: 11, color: "#666", marginTop: 6 }}>Deposit first to create an obligation</p>}
+          {!obligationAddr && <p className="text-xs opacity-40 mt-1">Deposit first to create an obligation</p>}
         </Card>
       </div>
 
       {/* Wrapped Tokens */}
       {config.tokens && config.tokens.length > 0 && (
         <Card title="Available Wrapped Tokens (KYC-gated)">
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #333", color: "#888" }}>
-                <th style={{ textAlign: "left", padding: "6px 0" }}>d-Token</th>
-                <th style={{ textAlign: "left" }}>Underlying</th>
-                <th style={{ textAlign: "right" }}>Price</th>
-                <th style={{ textAlign: "right" }}>Oracle</th>
-                <th style={{ textAlign: "right" }}>Pool</th>
-              </tr>
-            </thead>
-            <tbody>
-              {config.tokens.map((t: any) => (
-                <tr key={t.symbol} style={{ borderBottom: "1px solid #222" }}>
-                  <td style={{ padding: "8px 0", fontWeight: 600, color: "#4caf50" }}>d{t.symbol}</td>
-                  <td style={{ color: "#aaa" }}>{t.name}</td>
-                  <td style={{ textAlign: "right", fontFamily: "monospace" }}>${t.price >= 100 ? t.price.toFixed(2) : t.price.toFixed(4)}</td>
-                  <td style={{ textAlign: "right" }}><Addr value={t.oracle?.toBase58()} /></td>
-                  <td style={{ textAlign: "right" }}><Addr value={t.pool?.toBase58()} /></td>
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>d-Token</th>
+                  <th>Underlying</th>
+                  <th className="text-right">Price</th>
+                  <th className="text-right">Oracle</th>
+                  <th className="text-right">Pool</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {config.tokens.map((t: any) => (
+                  <tr key={t.symbol}>
+                    <td className="font-semibold text-success">d{t.symbol}</td>
+                    <td className="opacity-70">{t.name}</td>
+                    <td className="text-right font-mono">${t.price >= 100 ? t.price.toFixed(2) : t.price.toFixed(4)}</td>
+                    <td className="text-right"><Addr value={t.oracle?.toBase58()} /></td>
+                    <td className="text-right"><Addr value={t.pool?.toBase58()} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 
       <Card title="Market Info">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 12, color: "#666" }}>
+        <div className="grid grid-cols-2 gap-1 text-xs opacity-50">
           <span>Market:</span><Addr value={config.market.lendingMarket.toBase58()} />
           <span>dUSDY Reserve:</span><Addr value={config.market.dUsdyReserve.toBase58()} />
           <span>USDC Reserve:</span><Addr value={config.market.usdcReserve.toBase58()} />
@@ -367,44 +364,53 @@ export default function LendingPanel() {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ border: "1px solid #333", borderRadius: 8, padding: 20, background: "#0d0d1a" }}>
-      <h3 style={{ margin: "0 0 12px", fontSize: 16, color: "#e0e0e0" }}>{title}</h3>
-      {children}
+    <div className="card bg-base-200 border border-base-300 shadow-sm">
+      <div className="card-body p-6 gap-4">
+        <h3 className="card-title text-base">{title}</h3>
+        {children}
+      </div>
     </div>
   );
 }
 
-function StatBox({ label, value, unit, color }: { label: string; value: string; unit?: string; color?: string }) {
+function StatBox({ label, value, unit, colorClass }: { label: string; value: string; unit?: string; colorClass?: string }) {
   return (
-    <div>
-      <div style={{ fontSize: 24, fontWeight: 600, color: color || "#e0e0e0", fontFamily: "monospace" }}>{value}</div>
-      <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>{unit && <span style={{ color: "#666" }}>{unit} </span>}{label}</div>
+    <div className="text-center p-2">
+      <div className={`text-2xl font-bold font-mono ${colorClass || ""}`}>{value}</div>
+      <div className="text-xs opacity-50 mt-1">{unit && <span className="badge badge-ghost badge-xs mr-1">{unit}</span>}{label}</div>
     </div>
   );
 }
 
-function ActionButton({ label, onClick, color, disabled }: { label: string; onClick: () => void; color: string; disabled?: boolean }) {
+function ActionButton({ label, onClick, variant = "primary", disabled }: {
+  label: string; onClick: () => void; variant?: "primary" | "success" | "warning" | "error" | "info"; disabled?: boolean;
+}) {
   return (
-    <button onClick={onClick} disabled={disabled} style={{
-      padding: "8px 20px", border: `1px solid ${color}`, borderRadius: 6,
-      background: `${color}22`, color, cursor: disabled ? "not-allowed" : "pointer",
-      fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", opacity: disabled ? 0.5 : 1,
-    }}>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`btn btn-${variant} whitespace-nowrap`}
+    >
       {label}
     </button>
   );
 }
 
 function MaxButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}><span onClick={onClick} style={{ cursor: "pointer", textDecoration: "underline" }}>{label}</span></div>;
+  return (
+    <div className="mt-2">
+      <button onClick={onClick} className="btn btn-ghost btn-xs opacity-40 hover:opacity-70">
+        {label}
+      </button>
+    </div>
+  );
 }
 
 function Addr({ value }: { value?: string }) {
-  if (!value) return <span>—</span>;
-  return <span style={{ fontFamily: "monospace", color: "#aaa" }}>{value.slice(0, 8)}...{value.slice(-4)}</span>;
+  if (!value) return <span className="opacity-30">&mdash;</span>;
+  return (
+    <span className="font-mono text-xs opacity-60 hover:opacity-100 cursor-default" title={value}>
+      {value.slice(0, 8)}...{value.slice(-4)}
+    </span>
+  );
 }
-
-const inputStyle: React.CSSProperties = {
-  flex: 1, padding: "8px 12px", border: "1px solid #333", borderRadius: 6,
-  background: "#111", color: "#e0e0e0", fontSize: 14, fontFamily: "monospace",
-};

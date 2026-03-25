@@ -101,98 +101,86 @@ export function DepositCard({ usdcBalance, config, supplyAPY = 0 }: DepositCardP
     }
   }, [publicKey, amount, connection, config, sendTransaction]);
 
+  const isDisabled = status === "depositing" || Number(amount) <= 0 || Number(amount) > maxAmount;
+
   return (
-    <div style={styles.card}>
-      <h3 style={styles.title}>Deposit USDC</h3>
-      <p style={styles.subtitle}>
-        Earn {apyPct}% APY by supplying USDC to the lending market
-      </p>
-
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Amount (USDC)</label>
-        <div style={styles.inputRow}>
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => { setAmount(e.target.value); setStatus("idle"); }}
-            placeholder="0.00"
-            min="0"
-            max={maxAmount}
-            step="0.01"
-            style={styles.input}
-          />
-          <button onClick={() => setAmount(String(maxAmount))} style={styles.maxBtn}>
-            MAX
-          </button>
-        </div>
-        <span style={styles.balanceHint}>
-          Balance: {maxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
-        </span>
-      </div>
-
-      {Number(amount) > 0 && (
-        <div style={styles.preview}>
-          <div style={styles.previewRow}>
-            <span>You deposit</span>
-            <span>${Number(amount).toFixed(2)}</span>
-          </div>
-          <div style={styles.previewRow}>
-            <span>Est. yearly yield ({apyPct}%)</span>
-            <span style={{ color: "#4ade80" }}>
-              +${(Number(amount) * supplyAPY).toFixed(2)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      <button
-        onClick={handleDeposit}
-        disabled={status === "depositing" || Number(amount) <= 0 || Number(amount) > maxAmount}
-        style={{
-          ...styles.depositBtn,
-          opacity: status === "depositing" || Number(amount) <= 0 || Number(amount) > maxAmount ? 0.5 : 1,
-        }}
-      >
-        {status === "depositing" ? "Depositing..." : status === "success" ? "Deposited!" : "Deposit USDC"}
-      </button>
-
-      {status === "success" && txSig && (
-        <p style={styles.success}>
-          Deposit confirmed!{" "}
-          <a
-            href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: "#4ade80" }}
-          >
-            View tx
-          </a>
+    <div className="card bg-base-200 border border-base-300 shadow-xl">
+      <div className="card-body p-6 gap-4">
+        <h3 className="card-title text-lg">Deposit USDC</h3>
+        <p className="text-sm opacity-50 mb-5">
+          Earn {apyPct}% APY by supplying USDC to the lending market
         </p>
-      )}
-      {error && <p style={styles.error}>{error}</p>}
 
-      <div style={styles.info}>
-        <p>No lock-up period — withdraw anytime</p>
-        <p>Interest accrues every Solana slot (~400ms)</p>
+        <div className="mb-4">
+          <label className="block text-xs uppercase tracking-wide opacity-60 mb-1.5">
+            Amount (USDC)
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => { setAmount(e.target.value); setStatus("idle"); }}
+              placeholder="0.00"
+              min="0"
+              max={maxAmount}
+              step="0.01"
+              className="input input-bordered w-full font-mono text-lg"
+            />
+            <button
+              onClick={() => setAmount(String(maxAmount))}
+              className="btn btn-ghost btn-sm border border-base-300 text-primary font-bold self-center"
+            >
+              MAX
+            </button>
+          </div>
+          <span className="block text-xs opacity-50 mt-1.5 text-right">
+            Balance: {maxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
+          </span>
+        </div>
+
+        {Number(amount) > 0 && (
+          <div className="bg-base-300 rounded-lg p-3 mb-4">
+            <div className="flex justify-between text-sm opacity-80 mb-1">
+              <span>You deposit</span>
+              <span>${Number(amount).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="opacity-80">Est. yearly yield ({apyPct}%)</span>
+              <span className="text-success font-semibold">
+                +${(Number(amount) * supplyAPY).toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={handleDeposit}
+          disabled={isDisabled}
+          className={`btn btn-primary w-full text-base ${isDisabled ? "btn-disabled opacity-50" : ""}`}
+        >
+          {status === "depositing" ? "Depositing..." : status === "success" ? "Deposited!" : "Deposit USDC"}
+        </button>
+
+        {status === "success" && txSig && (
+          <p className="text-success text-sm mt-3 text-center">
+            Deposit confirmed!{" "}
+            <a
+              href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
+              target="_blank"
+              rel="noreferrer"
+              className="link link-success"
+            >
+              View tx
+            </a>
+          </p>
+        )}
+        {error && <p className="text-error text-xs mt-2">{error}</p>}
+
+        <div className="mt-5 pt-4 border-t border-base-300 text-xs opacity-50 leading-relaxed">
+          <p>No lock-up period — withdraw anytime</p>
+          <p>Interest accrues every Solana slot (~400ms)</p>
+        </div>
       </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  card: { background: "#111827", border: "1px solid #1f2937", borderRadius: 12, padding: "24px" },
-  title: { fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 4 },
-  subtitle: { fontSize: 13, color: "#6b7280", marginBottom: 20 },
-  inputGroup: { marginBottom: 16 },
-  label: { display: "block", fontSize: 12, color: "#9ca3af", marginBottom: 6, textTransform: "uppercase" as const, letterSpacing: 0.5 },
-  inputRow: { display: "flex", gap: 8 },
-  input: { flex: 1, background: "#0a0e17", border: "1px solid #1f2937", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 18, fontFamily: "monospace", outline: "none" },
-  maxBtn: { background: "#1f2937", border: "1px solid #374151", borderRadius: 8, padding: "0 16px", color: "#4ecdc4", fontSize: 12, fontWeight: 700, cursor: "pointer" },
-  balanceHint: { display: "block", fontSize: 11, color: "#6b7280", marginTop: 6, textAlign: "right" as const },
-  preview: { background: "#0a0e17", borderRadius: 8, padding: "12px 16px", marginBottom: 16 },
-  previewRow: { display: "flex", justifyContent: "space-between", fontSize: 13, color: "#d1d5db", marginBottom: 4 },
-  depositBtn: { width: "100%", background: "#4ecdc4", color: "#0a0e17", border: "none", borderRadius: 8, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" },
-  success: { color: "#4ade80", fontSize: 13, marginTop: 12, textAlign: "center" as const },
-  error: { color: "#ef4444", fontSize: 12, marginTop: 8 },
-  info: { marginTop: 20, paddingTop: 16, borderTop: "1px solid #1f2937", fontSize: 11, color: "#6b7280", lineHeight: 1.8 },
-};

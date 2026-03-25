@@ -84,68 +84,64 @@ export function WithdrawCard({
 
   if (depositedUsdc <= 0) return null;
 
+  const isDisabled = status === "withdrawing" || Number(amount) <= 0 || Number(amount) > maxUsdc;
+
   return (
-    <div style={styles.card}>
-      <h3 style={styles.title}>Withdraw USDC</h3>
-      <p style={styles.subtitle}>Redeem your deposit + earned interest</p>
+    <div className="card bg-base-200 border border-base-300 shadow-xl">
+      <div className="card-body p-6 gap-4">
+        <h3 className="card-title text-lg">Withdraw USDC</h3>
+        <p className="text-sm opacity-50 mb-5">Redeem your deposit + earned interest</p>
 
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Amount (USDC)</label>
-        <div style={styles.inputRow}>
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => { setAmount(e.target.value); setStatus("idle"); }}
-            placeholder="0.00"
-            min="0"
-            max={maxUsdc}
-            step="0.01"
-            style={styles.input}
-          />
-          <button onClick={() => setAmount(String(maxUsdc.toFixed(2)))} style={styles.maxBtn}>
-            MAX
-          </button>
+        <div className="mb-4">
+          <label className="block text-xs uppercase tracking-wide opacity-60 mb-1.5">
+            Amount (USDC)
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => { setAmount(e.target.value); setStatus("idle"); }}
+              placeholder="0.00"
+              min="0"
+              max={maxUsdc}
+              step="0.01"
+              className="input input-bordered w-full font-mono text-lg"
+            />
+            <button
+              onClick={() => setAmount(String(maxUsdc.toFixed(2)))}
+              className="btn btn-ghost btn-sm border border-base-300 text-primary font-bold self-center"
+            >
+              MAX
+            </button>
+          </div>
+          <span className="block text-xs opacity-50 mt-1.5 text-right">
+            Available: {maxUsdc.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
+          </span>
         </div>
-        <span style={styles.balanceHint}>
-          Available: {maxUsdc.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
-        </span>
+
+        <button
+          onClick={handleWithdraw}
+          disabled={isDisabled}
+          className={`btn btn-warning w-full text-base ${isDisabled ? "btn-disabled opacity-50" : ""}`}
+        >
+          {status === "withdrawing" ? "Withdrawing..." : status === "success" ? "Withdrawn!" : "Withdraw USDC"}
+        </button>
+
+        {status === "success" && txSig && (
+          <p className="text-success text-sm mt-3 text-center">
+            Withdrawal confirmed!{" "}
+            <a
+              href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
+              target="_blank"
+              rel="noreferrer"
+              className="link link-success"
+            >
+              View tx
+            </a>
+          </p>
+        )}
+        {error && <p className="text-error text-xs mt-2">{error}</p>}
       </div>
-
-      <button
-        onClick={handleWithdraw}
-        disabled={status === "withdrawing" || Number(amount) <= 0 || Number(amount) > maxUsdc}
-        style={{
-          ...styles.withdrawBtn,
-          opacity: status === "withdrawing" || Number(amount) <= 0 || Number(amount) > maxUsdc ? 0.5 : 1,
-        }}
-      >
-        {status === "withdrawing" ? "Withdrawing..." : status === "success" ? "Withdrawn!" : "Withdraw USDC"}
-      </button>
-
-      {status === "success" && txSig && (
-        <p style={styles.success}>
-          Withdrawal confirmed!{" "}
-          <a href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`} target="_blank" rel="noreferrer" style={{ color: "#4ade80" }}>
-            View tx
-          </a>
-        </p>
-      )}
-      {error && <p style={styles.error}>{error}</p>}
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  card: { background: "#111827", border: "1px solid #1f2937", borderRadius: 12, padding: "24px" },
-  title: { fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 4 },
-  subtitle: { fontSize: 13, color: "#6b7280", marginBottom: 20 },
-  inputGroup: { marginBottom: 16 },
-  label: { display: "block", fontSize: 12, color: "#9ca3af", marginBottom: 6, textTransform: "uppercase" as const, letterSpacing: 0.5 },
-  inputRow: { display: "flex", gap: 8 },
-  input: { flex: 1, background: "#0a0e17", border: "1px solid #1f2937", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 18, fontFamily: "monospace", outline: "none" },
-  maxBtn: { background: "#1f2937", border: "1px solid #374151", borderRadius: 8, padding: "0 16px", color: "#4ecdc4", fontSize: 12, fontWeight: 700, cursor: "pointer" },
-  balanceHint: { display: "block", fontSize: 11, color: "#6b7280", marginTop: 6, textAlign: "right" as const },
-  withdrawBtn: { width: "100%", background: "#374151", color: "#fff", border: "1px solid #4b5563", borderRadius: 8, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" },
-  success: { color: "#4ade80", fontSize: 13, marginTop: 12, textAlign: "center" as const },
-  error: { color: "#ef4444", fontSize: 12, marginTop: 8 },
-};

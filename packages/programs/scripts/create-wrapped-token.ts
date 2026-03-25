@@ -220,6 +220,13 @@ async function main() {
     console.log(`  d${opts.symbol} mint: ${wrappedMint.toBase58()}`);
     console.log(`  Tx: ${sig.slice(0, 30)}...`);
 
+    // Create vault (ATA for underlying token, owned by pool PDA)
+    console.log(`  Creating vault...`);
+    const vaultAta = await getOrCreateAssociatedTokenAccount(
+      conn, auth, underlyingMint, poolPda, true // allowOwnerOffCurve for PDA
+    );
+    console.log(`  Vault: ${vaultAta.address.toBase58()}`);
+
     // Register lending market
     try {
       const marketConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "configs/devnet/working-reserves.json"), "utf8"));
@@ -277,7 +284,25 @@ async function main() {
     }
   }
 
-  // Step 4: Mint test underlying tokens
+  // Step 4: Activate wrapping (transfer delta-mint authority to pool PDA)
+  console.log(`\nActivating wrap flow...`);
+  try {
+    await (govProgram.methods as any)
+      .activateWrapping()
+      .accounts({
+        authority: auth.publicKey,
+        poolConfig: poolPda,
+        dmMintConfig,
+        deltaMintProgram: DELTA_MINT,
+      })
+      .rpc();
+    console.log(`  Wrapping activated! Pool PDA is now the delta-mint authority.`);
+  } catch (e: any) {
+    console.log(`  Activate failed: ${e.message?.slice(0, 80)}`);
+    console.log(`  (May already be activated or authority mismatch)`);
+  }
+
+  // Step 5: Mint test underlying tokens
   if (!opts.existingMint) {
     console.log(`\nMinting ${opts.mintAmount} ${opts.name}...`);
     const ata = await getOrCreateAssociatedTokenAccount(conn, auth, underlyingMint, auth.publicKey);
@@ -285,16 +310,18 @@ async function main() {
     console.log(`  Minted to: ${ata.address.toBase58()}`);
   }
 
-  // Step 5: Mint d-tokens (wrapped)
-  console.log(`\nMinting d${opts.symbol} tokens...`);
+  // Step 5: Wrap underlying → d-tokens (backed 1:1)
+  console.log(`\nWrapping ${opts.mintAmount} ${opts.name} → d${opts.symbol}...`);
   const [dmAuthority] = PublicKey.findProgramAddressSync(
     [Buffer.from("mint_authority"), wrappedMint.toBuffer()],
     DELTA_MINT
   );
   const dTokenAta = getAssociatedTokenAddressSync(wrappedMint, auth.publicKey, false, TOKEN_2022_PROGRAM_ID);
+  const underlyingAta = getAssociatedTokenAddressSync(underlyingMint, auth.publicKey);
+  const vaultAta = getAssociatedTokenAddressSync(underlyingMint, poolPda, true);
 
   try {
-    // Create ATA if needed
+    // Create d-token ATA if needed
     const ataInfo = await conn.getAccountInfo(dTokenAta);
     if (!ataInfo) {
       const { createAssociatedTokenAccountInstruction } = await import("@solana/spl-token");
@@ -304,25 +331,54 @@ async function main() {
       await sendAndConfirmTransaction(conn, tx, [auth]);
     }
 
-    const mintAmount = new BN(opts.mintAmount * 10 ** opts.decimals);
+    // Ensure vault ATA exists
+    await getOrCreateAssociatedTokenAccount(conn, auth, underlyingMint, poolPda, true);
+
+    const wrapAmount = new BN(opts.mintAmount * 10 ** opts.decimals);
     await (govProgram.methods as any)
-      .mintWrapped(mintAmount)
+      .wrap(wrapAmount)
       .accounts({
-        authority: auth.publicKey,
+        user: auth.publicKey,
         poolConfig: poolPda,
-        adminEntry: null,
+        underlyingMint,
+        userUnderlyingAta: underlyingAta,
+        vault: vaultAta,
         dmMintConfig,
         wrappedMint,
         dmMintAuthority: dmAuthority,
         whitelistEntry,
-        destination: dTokenAta,
+        userWrappedAta: dTokenAta,
         deltaMintProgram: DELTA_MINT,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        underlyingTokenProgram: TOKEN_PROGRAM_ID,
+        wrappedTokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
-    console.log(`  Minted ${opts.mintAmount} d${opts.symbol}`);
+    console.log(`  Wrapped ${opts.mintAmount} ${opts.name} → d${opts.symbol} (1:1 backed)`);
   } catch (e: any) {
-    console.log(`  Mint failed: ${e.message?.slice(0, 80)}`);
+    console.log(`  Wrap failed: ${e.message?.slice(0, 120)}`);
+    console.log(`  (This is expected for existing pools — authority may not be transferred)`);
+    // Fallback: try legacy mint_wrapped for old pools
+    try {
+      const mintAmount = new BN(opts.mintAmount * 10 ** opts.decimals);
+      await (govProgram.methods as any)
+        .mintWrapped(mintAmount)
+        .accounts({
+          authority: auth.publicKey,
+          poolConfig: poolPda,
+          adminEntry: null,
+          dmMintConfig,
+          wrappedMint,
+          dmMintAuthority: dmAuthority,
+          whitelistEntry,
+          destination: dTokenAta,
+          deltaMintProgram: DELTA_MINT,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      console.log(`  Fallback: minted ${opts.mintAmount} d${opts.symbol} (unbacked — legacy mode)`);
+    } catch (e2: any) {
+      console.log(`  Legacy mint also failed: ${e2.message?.slice(0, 80)}`);
+    }
   }
 
   // Save config

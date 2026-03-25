@@ -72,6 +72,17 @@ export const DEVNET_CONFIG = {
       dmMintConfig: new PublicKey("93Ep7aetCtCBtSnBBtSudSPMJU4w9FjsdRG3xN9xYpcy"),
       oracle: new PublicKey("5MPet5McLhp5UspmGDnrYtkjuP4QjysWVDyrsFXHStYy"),
     },
+    {
+      name: "Wrapped USDY v2",
+      symbol: "wUSDY2",
+      decimals: 6,
+      price: 1.08,
+      underlyingMint: new PublicKey("2Qscw6YTs89d4ft6ZMVryMx8HJ2hXpLZMf5czvvfmPZ1"),
+      wrappedMint: new PublicKey("cShjatYP8nTriW5pjcR39T9yBqJ9zmaHQopzb8Un2pX"),
+      pool: new PublicKey("567fZxTVhv2LoToixSoyiJs6M6gFJVFE8UKWznHvxTFd"),
+      dmMintConfig: new PublicKey("BbUt1WgWnXFKA8ZaKmsBDybdavVjfS9xwRAgRPju6izE"),
+      oracle: new PublicKey("28eTXW6QCftqHgHQe2qtW3Ab9dci67YAD8sTbPgmEgh1"),
+    },
   ] as WrappedToken[],
 
   // Oracles (PriceUpdateV2 format — accepted by klend via discriminator check)

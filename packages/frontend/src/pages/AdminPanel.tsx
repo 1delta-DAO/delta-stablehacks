@@ -134,55 +134,45 @@ export default function AdminPanel() {
   if (!connected) {
     return (
       <Card title="Connect Wallet">
-        <p style={{ color: "#888" }}>Connect your wallet to access admin controls.</p>
+        <p className="opacity-50">Connect your wallet to access admin controls.</p>
       </Card>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="flex flex-col gap-6">
       {isAdmin === false && (
-        <div style={{
-          padding: "12px 16px", borderRadius: 6, background: "#3a2a1a",
-          border: "1px solid #ff9800", color: "#ff9800", fontSize: 13,
-        }}>
-          Connected wallet is not an admin. Ask the root authority to run:{" "}
-          <span style={{ fontFamily: "monospace" }}>pnpm add-admin {publicKey?.toBase58()}</span>
+        <div role="alert" className="alert alert-warning">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+          <div>
+            <p className="text-sm">Connected wallet is not an admin.</p>
+            <p className="text-xs opacity-70 mt-1">Ask the root authority to run: <code className="font-mono bg-base-300 px-1 rounded">pnpm add-admin {publicKey?.toBase58()}</code></p>
+          </div>
         </div>
       )}
       {isAdmin === true && !isRootAuthority && (
-        <div style={{
-          padding: "12px 16px", borderRadius: 6, background: "#1a3a1a",
-          border: "1px solid #4caf50", color: "#4caf50", fontSize: 13,
-        }}>
-          Signed in as delegated admin. You can whitelist and mint.
+        <div role="alert" className="alert alert-success">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span className="text-sm">Signed in as delegated admin. You can whitelist and mint.</span>
         </div>
       )}
       {status && (
-        <div style={{
-          padding: "10px 16px",
-          borderRadius: 6,
-          background: status.type === "ok" ? "#1a3a1a" : status.type === "err" ? "#3a1a1a" : "#1a1a3a",
-          border: `1px solid ${status.type === "ok" ? "#4caf50" : status.type === "err" ? "#f44336" : "#4a9eff"}`,
-          color: status.type === "ok" ? "#4caf50" : status.type === "err" ? "#f44336" : "#4a9eff",
-          fontSize: 13,
-          fontFamily: "monospace",
-        }}>
-          {status.msg}
+        <div role="alert" className={`alert ${status.type === "ok" ? "alert-success" : status.type === "err" ? "alert-error" : "alert-info"}`}>
+          <span className="text-sm font-mono break-all">{status.msg}</span>
         </div>
       )}
 
       {/* KYC Whitelist */}
       <Card title="1. KYC Whitelist Management">
-        <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px" }}>
+        <p className="opacity-50 text-sm mb-3">
           Add a wallet to the KYC whitelist to allow them to hold dUSDY.
         </p>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="flex gap-3">
           <input
             placeholder="Wallet address to whitelist"
             value={whitelistAddr}
             onChange={(e) => setWhitelistAddr(e.target.value)}
-            style={inputStyle}
+            className="input input-bordered font-mono flex-1"
           />
           <ActionButton label="Whitelist" onClick={handleWhitelist} disabled={loading || !whitelistAddr || !isAuthority} />
         </div>
@@ -190,21 +180,21 @@ export default function AdminPanel() {
 
       {/* Mint Tokens */}
       <Card title="2. Mint dUSDY">
-        <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px" }}>
+        <p className="opacity-50 text-sm mb-3">
           Mint dUSDY tokens to a whitelisted counterparty.
         </p>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="flex gap-3">
           <input
             placeholder="Recipient wallet"
             value={mintRecipient}
             onChange={(e) => setMintRecipient(e.target.value)}
-            style={{ ...inputStyle, flex: 2 }}
+            className="input input-bordered font-mono flex-[2]"
           />
           <input
             placeholder="Amount"
             value={mintAmount}
             onChange={(e) => setMintAmount(e.target.value)}
-            style={{ ...inputStyle, flex: 1 }}
+            className="input input-bordered font-mono flex-1"
             type="number"
           />
           <ActionButton label="Mint" onClick={handleMint} disabled={loading || !mintRecipient || !mintAmount || !isAuthority} />
@@ -213,7 +203,7 @@ export default function AdminPanel() {
 
       {/* Market Status */}
       <Card title="Deployment Status">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 13, color: "#aaa" }}>
+        <div className="grid grid-cols-2 gap-1 text-sm opacity-70">
           <span>Authority:</span>
           <Addr value={publicKey?.toBase58()} />
           <span>Cluster:</span><span>Devnet</span>
@@ -228,7 +218,7 @@ export default function AdminPanel() {
           <span>klend:</span>
           <Addr value={config.programs.klend.toBase58()} />
           <span>SDK ready:</span>
-          <span style={{ color: ready ? "#4caf50" : "#f44336" }}>{ready ? "Yes" : "No (connect wallet)"}</span>
+          <span className={ready ? "text-success" : "text-error"}>{ready ? "Yes" : "No (connect wallet)"}</span>
         </div>
       </Card>
     </div>
@@ -239,26 +229,23 @@ export default function AdminPanel() {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ border: "1px solid #333", borderRadius: 8, padding: 20, background: "#0d0d1a" }}>
-      <h3 style={{ margin: "0 0 12px", fontSize: 16, color: "#e0e0e0" }}>{title}</h3>
-      {children}
+    <div className="card bg-base-200 border border-base-300 shadow-sm">
+      <div className="card-body p-6 gap-4">
+        <h3 className="text-base font-semibold">{title}</h3>
+        {children}
+      </div>
     </div>
   );
 }
 
-function ActionButton({ label, onClick, disabled, style }: {
-  label: string; onClick: () => void; disabled?: boolean; style?: React.CSSProperties;
+function ActionButton({ label, onClick, disabled }: {
+  label: string; onClick: () => void; disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      style={{
-        padding: "8px 16px", border: "1px solid #4a9eff", borderRadius: 6,
-        background: disabled ? "#111" : "#1a2a4a", color: disabled ? "#555" : "#4a9eff",
-        cursor: disabled ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap",
-        ...style,
-      }}
+      className="btn btn-primary whitespace-nowrap"
     >
       {label}
     </button>
@@ -266,15 +253,10 @@ function ActionButton({ label, onClick, disabled, style }: {
 }
 
 function Addr({ value }: { value?: string }) {
-  if (!value) return <span style={{ color: "#555" }}>—</span>;
+  if (!value) return <span className="opacity-30">&mdash;</span>;
   return (
-    <span style={{ fontFamily: "monospace", color: "#e0e0e0" }}>
+    <span className="font-mono text-xs opacity-60">
       {value.slice(0, 8)}...{value.slice(-4)}
     </span>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  flex: 1, padding: "8px 12px", border: "1px solid #333", borderRadius: 6,
-  background: "#111", color: "#e0e0e0", fontSize: 13, fontFamily: "monospace",
-};

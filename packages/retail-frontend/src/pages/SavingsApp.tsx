@@ -22,11 +22,9 @@ export function SavingsApp() {
   const [kycStatus, setKycStatus] = useState<"unknown" | "checking" | "approved" | "not_approved">("unknown");
   const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
 
-  // Check KYC status
   useEffect(() => {
     if (!publicKey || !connected) { setKycStatus("unknown"); return; }
     setKycStatus("checking");
-
     const [whitelistEntry] = PublicKey.findProgramAddressSync(
       [Buffer.from("whitelist"), config.pool.dmMintConfig.toBuffer(), publicKey.toBuffer()],
       config.programs.deltaMint
@@ -36,7 +34,6 @@ export function SavingsApp() {
     });
   }, [publicKey, connected, connection, config]);
 
-  // Fetch USDC balance
   const refreshUsdcBalance = useCallback(() => {
     if (!publicKey || !connected) { setUsdcBalance(null); return; }
     const ata = getAssociatedTokenAddressSync(config.usdc.mint, publicKey, false, TOKEN_PROGRAM_ID);
@@ -47,85 +44,91 @@ export function SavingsApp() {
 
   useEffect(() => { refreshUsdcBalance(); }, [refreshUsdcBalance]);
 
-  // Self-register via Civic
   const handleSelfRegister = useCallback(async () => {
     if (!publicKey || !governor) return;
-
     const [whitelistEntry] = PublicKey.findProgramAddressSync(
       [Buffer.from("whitelist"), config.pool.dmMintConfig.toBuffer(), publicKey.toBuffer()],
       config.programs.deltaMint
     );
-    // Civic Gateway v2 program ID
     const CIVIC_GATEWAY = new PublicKey("Gtwph6B4yrNFi2E7VEVoE3bSEEj1CFBRFBZodvmBp59K");
     const gkNetwork = config.civic.gatekeeperNetwork;
     const [gatewayToken] = PublicKey.findProgramAddressSync(
       [publicKey.toBuffer(), Buffer.from("gateway"), Buffer.alloc(8), gkNetwork.toBuffer()],
       CIVIC_GATEWAY
     );
-
     const sig = await (governor.methods as any)
       .selfRegister()
       .accounts({
-        user: publicKey,
-        poolConfig: config.pool.poolConfig,
-        gatewayToken,
-        dmMintConfig: config.pool.dmMintConfig,
-        whitelistEntry,
-        deltaMintProgram: config.programs.deltaMint,
-        systemProgram: SystemProgram.programId,
+        user: publicKey, poolConfig: config.pool.poolConfig, gatewayToken,
+        dmMintConfig: config.pool.dmMintConfig, whitelistEntry,
+        deltaMintProgram: config.programs.deltaMint, systemProgram: SystemProgram.programId,
       })
       .rpc();
     setKycStatus("approved");
     return sig;
   }, [publicKey, governor, config]);
 
-  const apyDisplay = reserveData.loading ? "—" : `~${(reserveData.supplyAPY * 100).toFixed(1)}%`;
+  const apyDisplay = reserveData.loading ? "..." : `~${(reserveData.supplyAPY * 100).toFixed(1)}%`;
 
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.logo}>
-          <span style={styles.logoIcon}>&#9651;</span>
-          <span style={styles.logoText}>Delta Savings</span>
+    <div data-theme="synthwave" className="min-h-screen bg-base-100 text-base-content flex flex-col">
+      {/* Navbar */}
+      <div className="navbar bg-base-200/50 backdrop-blur-sm border-b border-primary/20 px-6">
+        <div className="navbar-start gap-2">
+          <span className="text-2xl">&#9651;</span>
+          <span className="font-bold text-lg bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+            Delta Savings
+          </span>
         </div>
-        <WalletMultiButton style={styles.walletBtn} />
-      </header>
+        <div className="navbar-end">
+          <WalletMultiButton />
+        </div>
+      </div>
 
-      <section style={styles.hero}>
-        <h1 style={styles.heroTitle}>Earn yield on your USDC</h1>
-        <p style={styles.heroSub}>
-          Deposit USDC into our regulated lending market and earn competitive
-          returns. KYC-verified for your protection.
+      {/* Hero */}
+      <section className="text-center py-16 px-8 bg-gradient-to-b from-base-200 to-base-100">
+        <h1 className="text-5xl font-extrabold mb-4 bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
+          Earn yield on your USDC
+        </h1>
+        <p className="text-base-content/60 max-w-lg mx-auto mb-8 text-lg leading-relaxed">
+          Deposit USDC into our regulated lending market and earn competitive returns.
+          KYC-verified for your protection.
         </p>
-        <div style={styles.apyBadge}>
-          <span style={styles.apyLabel}>Current APY</span>
-          <span style={styles.apyValue}>{apyDisplay}</span>
+        <div className="inline-flex flex-col items-center bg-base-200 border-2 border-primary rounded-2xl px-10 py-4 shadow-lg shadow-primary/20">
+          <span className="text-xs uppercase tracking-widest text-base-content/50 mb-1">Current APY</span>
+          <span className="text-4xl font-black text-primary">{apyDisplay}</span>
         </div>
       </section>
 
-      <main style={styles.main}>
+      {/* Main */}
+      <main className="flex-1 px-8 py-8 max-w-4xl mx-auto w-full">
         {!connected ? (
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>Get Started</h2>
-            <p style={styles.cardText}>
-              Connect your Solana wallet to start earning yield on your USDC deposits.
-            </p>
-            <WalletMultiButton style={styles.ctaBtn} />
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body items-center text-center">
+              <h2 className="card-title text-2xl mb-2">Get Started</h2>
+              <p className="text-base-content/60 mb-6">
+                Connect your Solana wallet to start earning yield on your USDC deposits.
+              </p>
+              <WalletMultiButton />
+            </div>
           </div>
         ) : kycStatus === "checking" || kycStatus === "unknown" ? (
-          <div style={styles.card}>
-            <p style={styles.cardText}>Checking verification status...</p>
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body items-center">
+              <span className="loading loading-spinner loading-lg text-primary"></span>
+              <p className="text-base-content/60 mt-4">Checking verification status...</p>
+            </div>
           </div>
         ) : kycStatus === "not_approved" ? (
           <KycGate onRegister={handleSelfRegister} />
         ) : (
-          <div style={styles.grid}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <PortfolioCard
               usdcBalance={usdcBalance}
               depositedUsdc={cTokenData.usdcValue}
               supplyAPY={reserveData.supplyAPY}
             />
-            <div style={styles.actionsCol}>
+            <div className="flex flex-col gap-6">
               <FaucetCard usdcBalance={usdcBalance} onMinted={refreshUsdcBalance} />
               <DepositCard
                 usdcBalance={usdcBalance}
@@ -143,34 +146,13 @@ export function SavingsApp() {
         )}
       </main>
 
-      <footer style={styles.footer}>
-        <p>Delta Protocol — Regulated DeFi Savings</p>
-        <p style={styles.footerSmall}>Powered by Kamino Finance on Solana Devnet</p>
+      {/* Footer */}
+      <footer className="footer footer-center p-6 text-base-content/30 text-sm border-t border-base-300">
+        <div>
+          <p>Delta Protocol — Regulated DeFi Savings</p>
+          <p className="text-xs mt-1">Powered by Kamino Finance on Solana Devnet</p>
+        </div>
       </footer>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: { minHeight: "100vh", display: "flex", flexDirection: "column" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 32px", borderBottom: "1px solid #1a2035" },
-  logo: { display: "flex", alignItems: "center", gap: 8 },
-  logoIcon: { fontSize: 24, color: "#4ecdc4" },
-  logoText: { fontSize: 20, fontWeight: 700, color: "#fff" },
-  walletBtn: { background: "#1a2035", border: "1px solid #2a3050", borderRadius: 8, fontSize: 13 },
-  hero: { textAlign: "center", padding: "60px 32px 40px", background: "linear-gradient(180deg, #0a0e17 0%, #111827 100%)" },
-  heroTitle: { fontSize: 42, fontWeight: 800, color: "#fff", marginBottom: 12 },
-  heroSub: { fontSize: 16, color: "#9ca3af", maxWidth: 500, margin: "0 auto 24px", lineHeight: 1.5 },
-  apyBadge: { display: "inline-flex", flexDirection: "column", background: "#1a2035", border: "1px solid #4ecdc4", borderRadius: 12, padding: "12px 32px" },
-  apyLabel: { fontSize: 11, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: 1 },
-  apyValue: { fontSize: 28, fontWeight: 800, color: "#4ecdc4" },
-  main: { flex: 1, padding: "32px", maxWidth: 900, margin: "0 auto", width: "100%" },
-  card: { background: "#111827", border: "1px solid #1f2937", borderRadius: 12, padding: "32px", textAlign: "center" },
-  cardTitle: { fontSize: 20, fontWeight: 700, color: "#fff", marginBottom: 8 },
-  cardText: { fontSize: 14, color: "#9ca3af", marginBottom: 20 },
-  ctaBtn: { background: "#4ecdc4", color: "#0a0e17", border: "none", borderRadius: 8, padding: "12px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" },
-  grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 },
-  actionsCol: { display: "flex", flexDirection: "column", gap: 20 },
-  footer: { textAlign: "center", padding: "24px", borderTop: "1px solid #1a2035", color: "#6b7280", fontSize: 13 },
-  footerSmall: { fontSize: 11, marginTop: 4, color: "#4b5563" },
-};

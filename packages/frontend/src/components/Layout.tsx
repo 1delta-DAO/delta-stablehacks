@@ -1,75 +1,140 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import AdminPanel from "../pages/AdminPanel";
 import LendingPanel from "../pages/LendingPanel";
 import OraclePanel from "../pages/OraclePanel";
+import MintPanel from "../pages/MintPanel";
+import MarketPanel from "../pages/MarketPanel";
+import WrapPanel from "../pages/WrapPanel";
 
-type Tab = "admin" | "lending" | "oracles";
+type Tab = "admin" | "wrap" | "lending" | "oracles" | "mint" | "market";
+
+const tabs: { key: Tab; label: string; desc: string }[] = [
+  { key: "admin", label: "Governance", desc: "KYC & Admin" },
+  { key: "wrap", label: "Wrap", desc: "KYC Collateral" },
+  { key: "mint", label: "Faucet", desc: "Test Tokens" },
+  { key: "market", label: "Markets", desc: "Reserves" },
+  { key: "lending", label: "Lending", desc: "Borrow / Deposit" },
+  { key: "oracles", label: "Oracles", desc: "Price Feeds" },
+];
+
+const themes = [
+  { id: "business", label: "Business" },
+  { id: "dark", label: "Dark" },
+  { id: "night", label: "Night" },
+  { id: "corporate", label: "Corporate" },
+  { id: "luxury", label: "Luxury" },
+  { id: "dracula", label: "Dracula" },
+  { id: "dim", label: "Dim" },
+  { id: "synthwave", label: "Synthwave" },
+  { id: "forest", label: "Forest" },
+  { id: "black", label: "Black" },
+  { id: "light", label: "Light" },
+  { id: "nord", label: "Nord" },
+];
 
 export default function Layout() {
   const [tab, setTab] = useState<Tab>("admin");
+  const [theme, setTheme] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("delta-theme") || "business";
+    }
+    return "business";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("delta-theme", theme);
+  }, [theme]);
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: 24, fontFamily: "system-ui" }}>
-      {/* Header */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 24 }}>Delta Lending Console</h1>
-          <p style={{ margin: 0, color: "#888", fontSize: 14 }}>
-            KYC-gated institutional lending on Solana
-          </p>
+    <div className="min-h-screen bg-base-100 text-base-content">
+      {/* Navbar */}
+      <div className="navbar bg-base-200 border-b border-base-300 px-4 lg:px-8 gap-2">
+        <div className="navbar-start">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-content font-bold text-sm">
+              D
+            </div>
+            <div>
+              <h1 className="text-base font-bold tracking-tight leading-tight">Delta Lending</h1>
+              <p className="text-[10px] opacity-40 leading-tight">Institutional KYC-Gated Lending</p>
+            </div>
+          </div>
         </div>
-        <WalletMultiButton />
-      </header>
+        <div className="navbar-end gap-2">
+          {/* Theme switcher */}
+          <div className="dropdown dropdown-end">
+            <div tabIndex={0} role="button" className="btn btn-ghost btn-sm btn-square">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            </div>
+            <ul tabIndex={0} className="dropdown-content menu bg-base-200 rounded-box z-50 w-52 p-2 shadow-2xl border border-base-300 max-h-80 overflow-y-auto">
+              <li className="menu-title text-xs opacity-40 px-2 pt-1 pb-2">Theme</li>
+              {themes.map((t) => (
+                <li key={t.id}>
+                  <button
+                    className={`${theme === t.id ? "active font-semibold" : ""}`}
+                    onClick={() => setTheme(t.id)}
+                  >
+                    <div className="flex items-center gap-2 w-full">
+                      <div className="flex gap-0.5" data-theme={t.id}>
+                        <span className="w-2 h-4 rounded-sm bg-primary"></span>
+                        <span className="w-2 h-4 rounded-sm bg-secondary"></span>
+                        <span className="w-2 h-4 rounded-sm bg-accent"></span>
+                        <span className="w-2 h-4 rounded-sm bg-neutral"></span>
+                      </div>
+                      {t.label}
+                      {theme === t.id && <span className="ml-auto opacity-50">&#10003;</span>}
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <WalletMultiButton />
+        </div>
+      </div>
 
       {/* Tab navigation */}
-      <nav style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-        <button
-          onClick={() => setTab("admin")}
-          style={{
-            padding: "8px 20px",
-            border: "1px solid #333",
-            borderRadius: 6,
-            background: tab === "admin" ? "#1a1a2e" : "transparent",
-            color: tab === "admin" ? "#fff" : "#888",
-            cursor: "pointer",
-            fontWeight: tab === "admin" ? 600 : 400,
-          }}
-        >
-          Admin / Governance
-        </button>
-        <button
-          onClick={() => setTab("lending")}
-          style={{
-            padding: "8px 20px",
-            border: "1px solid #333",
-            borderRadius: 6,
-            background: tab === "lending" ? "#1a1a2e" : "transparent",
-            color: tab === "lending" ? "#fff" : "#888",
-            cursor: "pointer",
-            fontWeight: tab === "lending" ? 600 : 400,
-          }}
-        >
-          Lending
-        </button>
-        <button
-          onClick={() => setTab("oracles")}
-          style={{
-            padding: "8px 20px",
-            border: "1px solid #333",
-            borderRadius: 6,
-            background: tab === "oracles" ? "#1a1a2e" : "transparent",
-            color: tab === "oracles" ? "#fff" : "#888",
-            cursor: "pointer",
-            fontWeight: tab === "oracles" ? 600 : 400,
-          }}
-        >
-          Oracles
-        </button>
-      </nav>
+      <div className="bg-base-200/50 border-b border-base-300">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8">
+          <div className="flex gap-2 py-3 overflow-x-auto">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`
+                  btn gap-2
+                  ${tab === t.key
+                    ? "btn-primary"
+                    : "btn-ghost opacity-50 hover:opacity-100"
+                  }
+                `}
+              >
+                <span className="font-semibold">{t.label}</span>
+                <span className={`text-xs hidden lg:inline ${tab === t.key ? "opacity-60" : "opacity-30"}`}>
+                  {t.desc}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Content */}
-      {tab === "admin" ? <AdminPanel /> : tab === "lending" ? <LendingPanel /> : <OraclePanel />}
+      <div className="max-w-5xl mx-auto px-4 lg:px-8 py-8">
+        {tab === "admin" && <AdminPanel />}
+        {tab === "wrap" && <WrapPanel />}
+        {tab === "mint" && <MintPanel />}
+        {tab === "market" && <MarketPanel />}
+        {tab === "lending" && <LendingPanel />}
+        {tab === "oracles" && <OraclePanel />}
+      </div>
+
+      {/* Footer */}
+      <footer className="footer footer-center p-6 text-base-content/20 text-xs border-t border-base-300 mt-8">
+        <p>Delta Protocol — Solana Devnet</p>
+      </footer>
     </div>
   );
 }
