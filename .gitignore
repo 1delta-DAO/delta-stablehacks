@@ -28,3 +28,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Transcripts and workshop notes (contain shared API keys)
+solstice-transcript.md
+workshop.md
