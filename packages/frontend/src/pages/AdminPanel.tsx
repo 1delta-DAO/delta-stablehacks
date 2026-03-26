@@ -172,7 +172,7 @@ export default function AdminPanel() {
             placeholder="Wallet address to whitelist"
             value={whitelistAddr}
             onChange={(e) => setWhitelistAddr(e.target.value)}
-            className="input input-bordered font-mono flex-1"
+            className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
           />
           <ActionButton label="Whitelist" onClick={handleWhitelist} disabled={loading || !whitelistAddr || !isAuthority} />
         </div>
@@ -188,14 +188,14 @@ export default function AdminPanel() {
             placeholder="Recipient wallet"
             value={mintRecipient}
             onChange={(e) => setMintRecipient(e.target.value)}
-            className="input input-bordered font-mono flex-[2]"
+            className="input input-bordered bg-base-200 text-base-content font-mono flex-[2]"
           />
           <input
             placeholder="Amount"
             value={mintAmount}
             onChange={(e) => setMintAmount(e.target.value)}
-            className="input input-bordered font-mono flex-1"
-            type="number"
+            className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
+            inputMode="decimal" pattern="[0-9.]*"
           />
           <ActionButton label="Mint" onClick={handleMint} disabled={loading || !mintRecipient || !mintAmount || !isAuthority} />
         </div>

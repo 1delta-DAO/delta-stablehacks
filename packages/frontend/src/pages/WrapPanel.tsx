@@ -13,6 +13,7 @@ import {
 } from "@solana/spl-token";
 import { usePrograms } from "../hooks/usePrograms";
 import { BN } from "@coral-xyz/anchor";
+import Dropdown from "../components/Dropdown";
 
 export default function WrapPanel() {
   const { publicKey, connected, sendTransaction } = useWallet();
@@ -229,23 +230,21 @@ export default function WrapPanel() {
               </span>
             </div>
             <div className="flex gap-3">
-              <select
+              <Dropdown
                 value={selectedToken}
-                onChange={(e) => setSelectedToken(Number(e.target.value))}
-                className="select select-bordered min-w-[160px]"
-              >
-                {tokens.map((t, i) => (
-                  <option key={t.symbol} value={i}>
-                    {mode === "wrap" ? t.name : `d${t.symbol}`}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setSelectedToken(Number(v))}
+                options={tokens.map((t, i) => ({
+                  value: i,
+                  label: mode === "wrap" ? t.name : `d${t.symbol}`,
+                }))}
+                className="min-w-[160px]"
+              />
               <input
-                type="number"
+                inputMode="decimal" pattern="[0-9.]*"
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="input input-bordered font-mono flex-1 text-lg"
+                className="input input-bordered bg-base-200 text-base-content font-mono flex-1 text-lg"
               />
               <button
                 onClick={() => setAmount(sourceBal || "0")}

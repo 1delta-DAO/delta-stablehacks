@@ -36,15 +36,26 @@ html, body {
   padding-inline: 1.25rem;
 }
 
-/* ---- Dropdown / Select fixes ---- */
-.dropdown-content,
-.menu {
+/* ---- Dropdown / Select / Input fixes ---- */
+html[data-theme] .dropdown-content,
+html[data-theme] .menu:not(.menu-horizontal) {
   background-color: oklch(var(--color-base-200)) !important;
   border: 1px solid oklch(var(--color-base-300)) !important;
 }
 
-select,
-select option {
+html[data-theme] select,
+html[data-theme] .select,
+html[data-theme] .select select,
+html[data-theme] select option,
+html[data-theme] .select option {
+  background-color: oklch(var(--color-base-200)) !important;
+  color: oklch(var(--color-base-content)) !important;
+}
+
+html[data-theme] input,
+html[data-theme] .input,
+html[data-theme] textarea,
+html[data-theme] .textarea {
   background-color: oklch(var(--color-base-200)) !important;
   color: oklch(var(--color-base-content)) !important;
 }

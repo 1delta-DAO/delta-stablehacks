@@ -300,7 +300,7 @@ export default function LendingPanel() {
             Deposit dUSDY as collateral to borrow USDC. Creates an obligation if needed.
           </p>
           <div className="flex gap-3">
-            <input placeholder="Amount" value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} className="input input-bordered flex-1 font-mono" type="number" />
+            <input placeholder="Amount" value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} className="input input-bordered bg-base-200 text-base-content flex-1 font-mono" inputMode="decimal" pattern="[0-9.]*" />
             <ActionButton label={loading ? "..." : "Deposit"} variant="success" onClick={handleDeposit} disabled={loading} />
           </div>
           <MaxButton label={`Wallet: ${dUsdyBalance ?? "—"} dUSDY`} onClick={() => setDepositAmt(dUsdyBalance || "")} />
@@ -311,7 +311,7 @@ export default function LendingPanel() {
             Borrow USDC against your dUSDY collateral (75% LTV).
           </p>
           <div className="flex gap-3">
-            <input placeholder="Amount" value={borrowAmt} onChange={(e) => setBorrowAmt(e.target.value)} className="input input-bordered flex-1 font-mono" type="number" />
+            <input placeholder="Amount" value={borrowAmt} onChange={(e) => setBorrowAmt(e.target.value)} className="input input-bordered bg-base-200 text-base-content flex-1 font-mono" inputMode="decimal" pattern="[0-9.]*" />
             <ActionButton label={loading ? "..." : "Borrow"} variant="warning" onClick={handleBorrow} disabled={loading || !obligationAddr} />
           </div>
           {!obligationAddr && <p className="text-xs opacity-40 mt-1">Deposit first to create an obligation</p>}

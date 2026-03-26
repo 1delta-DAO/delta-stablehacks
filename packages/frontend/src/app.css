@@ -42,31 +42,47 @@ html, body {
 }
 
 /* ---- Dropdown / Select / Option fixes ---- */
-.dropdown-content,
-.menu {
+/* Use extremely high specificity to beat DaisyUI's @layer rules */
+html[data-theme] .dropdown-content,
+html[data-theme] .menu:not(.menu-horizontal) {
   background-color: oklch(var(--color-base-200)) !important;
   border: 1px solid oklch(var(--color-base-300)) !important;
 }
 
-select,
-.select,
-select option,
-.select option {
+html[data-theme] select,
+html[data-theme] .select,
+html[data-theme] .select select {
   background-color: oklch(var(--color-base-200)) !important;
   color: oklch(var(--color-base-content)) !important;
 }
 
-/* Firefox needs explicit option styling */
-option {
+html[data-theme] select option,
+html[data-theme] .select option {
   background-color: oklch(var(--color-base-200)) !important;
   color: oklch(var(--color-base-content)) !important;
 }
 
-/* Focused/open select */
-select:focus,
-.select:focus {
+html[data-theme] select:focus,
+html[data-theme] .select:focus {
   background-color: oklch(var(--color-base-200)) !important;
-  outline-color: oklch(var(--color-primary));
+  outline-color: oklch(var(--color-primary)) !important;
+}
+
+/* Also fix inputs that might have transparent bg */
+html[data-theme] input,
+html[data-theme] .input,
+html[data-theme] textarea,
+html[data-theme] .textarea {
+  background-color: oklch(var(--color-base-200)) !important;
+  color: oklch(var(--color-base-content)) !important;
+}
+
+/* Fix any remaining transparent backgrounds on interactive elements */
+html[data-theme] .btn-ghost {
+  background-color: transparent !important;
+}
+html[data-theme] .btn-ghost:hover {
+  background-color: oklch(var(--color-base-content) / 0.1) !important;
 }
 
 /* ---- Wallet Adapter Override ---- */

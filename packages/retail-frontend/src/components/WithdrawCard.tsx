@@ -105,7 +105,7 @@ export function WithdrawCard({
               min="0"
               max={maxUsdc}
               step="0.01"
-              className="input input-bordered w-full font-mono text-lg"
+              className="input input-bordered bg-base-200 text-base-content w-full font-mono text-lg"
             />
             <button
               onClick={() => setAmount(String(maxUsdc.toFixed(2)))}

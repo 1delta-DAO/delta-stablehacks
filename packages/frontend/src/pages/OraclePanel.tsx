@@ -308,13 +308,14 @@ export default function OraclePanel() {
               placeholder="Label (e.g. USDY/USD)"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
-              className="input input-bordered flex-1"
+              className="input input-bordered bg-base-200 text-base-content flex-1"
             />
             <input
+              inputMode="decimal" pattern="[0-9.]*"
               placeholder="Price (e.g. 1.08)"
               value={newPrice}
               onChange={(e) => setNewPrice(e.target.value)}
-              className="input input-bordered w-30"
+              className="input input-bordered bg-base-200 text-base-content w-30"
             />
             <button
               onClick={handleCreateOracle}
@@ -339,13 +340,14 @@ export default function OraclePanel() {
               placeholder="Oracle address"
               value={updateAddr}
               onChange={(e) => setUpdateAddr(e.target.value)}
-              className="input input-bordered font-mono flex-1"
+              className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
             />
             <input
+              inputMode="decimal" pattern="[0-9.]*"
               placeholder="New price"
               value={updatePrice}
               onChange={(e) => setUpdatePrice(e.target.value)}
-              className="input input-bordered w-30"
+              className="input input-bordered bg-base-200 text-base-content w-30"
             />
             <button
               onClick={handleUpdatePrice}

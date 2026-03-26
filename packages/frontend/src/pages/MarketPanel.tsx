@@ -18,6 +18,7 @@ import {
 } from "@solana/spl-token";
 import { usePrograms } from "../hooks/usePrograms";
 import * as crypto from "crypto";
+import Dropdown from "../components/Dropdown";
 import {
   reserveLiquiditySupply,
   reserveCollateralMint,
@@ -359,15 +360,12 @@ export default function MarketPanel() {
             Creates a klend reserve for the selected d-token. Automatically configures oracle, LTV (75%), liquidation threshold (85%), and limits.
           </p>
           <div className="flex gap-3">
-            <select
+            <Dropdown
               value={selectedToken}
-              onChange={(e) => setSelectedToken(Number(e.target.value))}
-              className="select select-bordered flex-1"
-            >
-              {tokens.map((t, i) => (
-                <option key={t.symbol} value={i}>d{t.symbol} — {t.name} (${t.price})</option>
-              ))}
-            </select>
+              onChange={(v) => setSelectedToken(Number(v))}
+              options={tokens.map((t, i) => ({ value: i, label: `d${t.symbol} — ${t.name} ($${t.price})` }))}
+              className="flex-1"
+            />
             <button
               onClick={handleCreateReserve}
               disabled={loading || tokens.length === 0}
@@ -391,32 +389,33 @@ export default function MarketPanel() {
               placeholder="Reserve address"
               value={configTarget}
               onChange={(e) => setConfigTarget(e.target.value)}
-              className="input input-bordered font-mono flex-1"
+              className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
             />
           </div>
           <div className="flex gap-3">
-            <select
+            <Dropdown
               value={configMode}
-              onChange={(e) => setConfigMode(e.target.value)}
-              className="select select-bordered min-w-[220px]"
-            >
-              <option value="0">LTV % (0-99)</option>
-              <option value="2">Liquidation Threshold % (LTV-100)</option>
-              <option value="8">Deposit Limit (u64)</option>
-              <option value="9">Borrow Limit (u64)</option>
-              <option value="16">Token Name (string)</option>
-              <option value="17">Price Max Age (seconds)</option>
-              <option value="20">Pyth Oracle (pubkey)</option>
-              <option value="23">Borrow Rate Curve</option>
-              <option value="32">Borrow Factor (min 100)</option>
-              <option value="38">Reserve Status (0=Active)</option>
-              <option value="44">Borrow Limit Outside EG (u64)</option>
-            </select>
+              onChange={(v) => setConfigMode(String(v))}
+              options={[
+                { value: "0", label: "LTV % (0-99)" },
+                { value: "2", label: "Liquidation Threshold %" },
+                { value: "8", label: "Deposit Limit (u64)" },
+                { value: "9", label: "Borrow Limit (u64)" },
+                { value: "16", label: "Token Name (string)" },
+                { value: "17", label: "Price Max Age (seconds)" },
+                { value: "20", label: "Pyth Oracle (pubkey)" },
+                { value: "23", label: "Borrow Rate Curve" },
+                { value: "32", label: "Borrow Factor (min 100)" },
+                { value: "38", label: "Reserve Status (0=Active)" },
+                { value: "44", label: "Borrow Limit Outside EG" },
+              ]}
+              className="min-w-[220px]"
+            />
             <input
               placeholder="Value"
               value={configValue}
               onChange={(e) => setConfigValue(e.target.value)}
-              className="input input-bordered font-mono flex-1"
+              className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
             />
             <button
               onClick={handleUpdateConfig}

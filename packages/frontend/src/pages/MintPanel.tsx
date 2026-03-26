@@ -1,153 +1,143 @@
 import { useState, useCallback, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey, Transaction } from "@solana/web3.js";
 import {
+  PublicKey,
+  Transaction,
+} from "@solana/web3.js";
+import {
+  TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
+  createMintToInstruction,
 } from "@solana/spl-token";
 import { usePrograms } from "../hooks/usePrograms";
-import { Program, BN } from "@coral-xyz/anchor";
+import Dropdown from "../components/Dropdown";
 
 export default function MintPanel() {
   const { publicKey, connected, sendTransaction } = useWallet();
   const { connection } = useConnection();
-  const { config, governor, ready } = usePrograms();
+  const { config, ready } = usePrograms();
 
   const [selectedToken, setSelectedToken] = useState(0);
   const [mintAmount, setMintAmount] = useState("1000");
-  const [balances, setBalances] = useState<Record<string, string>>({});
+  const [underlyingBalances, setUnderlyingBalances] = useState<Record<string, string>>({});
+  const [wrappedBalances, setWrappedBalances] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<{ msg: string; type: "ok" | "err" | "info" } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const tokens = config.tokens || [];
   const token = tokens[selectedToken];
 
-  // Load balances
+  // Load balances for both underlying and wrapped
   useEffect(() => {
     if (!publicKey || !connected || tokens.length === 0) return;
     let cancelled = false;
 
     (async () => {
-      const bals: Record<string, string> = {};
+      const uBals: Record<string, string> = {};
+      const wBals: Record<string, string> = {};
       for (const t of tokens) {
         try {
-          const ata = getAssociatedTokenAddressSync(t.wrappedMint, publicKey, false, TOKEN_2022_PROGRAM_ID);
-          const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
-          bals[t.symbol] = bal ? (Number(bal.value.amount) / 10 ** t.decimals).toFixed(2) : "0.00";
-        } catch {
-          bals[t.symbol] = "0.00";
-        }
+          const uAta = getAssociatedTokenAddressSync(t.underlyingMint, publicKey);
+          const uBal = await connection.getTokenAccountBalance(uAta).catch(() => null);
+          uBals[t.symbol] = uBal ? (Number(uBal.value.amount) / 10 ** t.decimals).toFixed(2) : "0.00";
+        } catch { uBals[t.symbol] = "0.00"; }
+        try {
+          const wAta = getAssociatedTokenAddressSync(t.wrappedMint, publicKey, false, TOKEN_2022_PROGRAM_ID);
+          const wBal = await connection.getTokenAccountBalance(wAta).catch(() => null);
+          wBals[t.symbol] = wBal ? (Number(wBal.value.amount) / 10 ** t.decimals).toFixed(2) : "0.00";
+        } catch { wBals[t.symbol] = "0.00"; }
       }
-      if (!cancelled) setBalances(bals);
+      if (!cancelled) { setUnderlyingBalances(uBals); setWrappedBalances(wBals); }
     })();
     return () => { cancelled = true; };
   }, [publicKey, connected, connection, tokens]);
 
-  const handleMint = useCallback(async () => {
-    if (!publicKey || !governor || !token || !mintAmount) return;
+  // Mint underlying tokens (devnet faucet)
+  const handleMintUnderlying = useCallback(async () => {
+    if (!publicKey || !token || !mintAmount) return;
     setLoading(true);
-    setStatus({ msg: `Minting ${mintAmount} d${token.symbol}...`, type: "info" });
+    setStatus({ msg: `Minting ${mintAmount} ${token.name}...`, type: "info" });
 
     try {
-      const amount = new BN(Math.floor(Number(mintAmount) * 10 ** token.decimals));
-      const ata = getAssociatedTokenAddressSync(token.wrappedMint, publicKey, false, TOKEN_2022_PROGRAM_ID);
-
-      // Derive PDAs
-      const [dmMintAuthority] = PublicKey.findProgramAddressSync(
-        [Buffer.from("mint_authority"), token.wrappedMint.toBuffer()],
-        config.programs.deltaMint
-      );
-      const [whitelistEntry] = PublicKey.findProgramAddressSync(
-        [Buffer.from("whitelist"), token.dmMintConfig.toBuffer(), publicKey.toBuffer()],
-        config.programs.deltaMint
-      );
-
-      // Check if admin (derive admin PDA)
-      const rootAuthority = "AhKNmBmaeq6XrrEyGnSQne3WeU4SoN7hSAGieTiqPaJX";
-      const isRoot = publicKey.toBase58() === rootAuthority;
-      let adminEntry: PublicKey | null = null;
-      if (!isRoot) {
-        const [ae] = PublicKey.findProgramAddressSync(
-          [Buffer.from("admin"), token.pool.toBuffer(), publicKey.toBuffer()],
-          config.programs.governor
-        );
-        const aeInfo = await connection.getAccountInfo(ae);
-        if (aeInfo) adminEntry = ae;
-      }
+      const amount = BigInt(Math.floor(Number(mintAmount) * 10 ** token.decimals));
+      const ata = getAssociatedTokenAddressSync(token.underlyingMint, publicKey);
 
       const tx = new Transaction();
 
       // Create ATA if needed
       const ataInfo = await connection.getAccountInfo(ata);
       if (!ataInfo) {
-        tx.add(createAssociatedTokenAccountInstruction(publicKey, ata, publicKey, token.wrappedMint, TOKEN_2022_PROGRAM_ID));
+        tx.add(createAssociatedTokenAccountInstruction(publicKey, ata, publicKey, token.underlyingMint));
       }
 
-      // Mint via governor
-      const mintAccounts: any = {
-        authority: publicKey,
-        poolConfig: token.pool,
-        adminEntry: adminEntry,
-        dmMintConfig: token.dmMintConfig,
-        wrappedMint: token.wrappedMint,
-        dmMintAuthority,
-        whitelistEntry,
-        destination: ata,
-        deltaMintProgram: config.programs.deltaMint,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      };
-
-      const ix = await (governor.methods as any)
-        .mintWrapped(amount)
-        .accounts(mintAccounts)
-        .instruction();
-      tx.add(ix);
+      // Mint underlying tokens — the deployer wallet is the mint authority
+      // On devnet, only the deployer can call this. If the connected wallet
+      // is not the mint authority, this will fail with a helpful message.
+      tx.add(createMintToInstruction(
+        token.underlyingMint,
+        ata,
+        publicKey, // mint authority must be signer
+        amount,
+      ));
 
       const sig = await sendTransaction(tx, connection);
       await connection.confirmTransaction(sig, "confirmed");
 
-      setStatus({ msg: `Minted ${mintAmount} d${token.symbol}! Tx: ${sig.slice(0, 20)}...`, type: "ok" });
+      setStatus({ msg: `Minted ${mintAmount} ${token.name}! Now go to Wrap tab to create d-tokens. Tx: ${sig.slice(0, 20)}...`, type: "ok" });
+      setMintAmount("");
 
       // Refresh balance
       const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
-      if (bal) setBalances(prev => ({ ...prev, [token.symbol]: (Number(bal.value.amount) / 10 ** token.decimals).toFixed(2) }));
+      if (bal) setUnderlyingBalances(prev => ({ ...prev, [token.symbol]: (Number(bal.value.amount) / 10 ** token.decimals).toFixed(2) }));
     } catch (e: any) {
-      setStatus({ msg: `Failed: ${e.message?.slice(0, 100)}`, type: "err" });
+      const msg = e.message?.includes("owner does not match")
+        ? "Only the mint authority (deployer wallet) can mint test tokens."
+        : `Failed: ${e.message?.slice(0, 100)}`;
+      setStatus({ msg, type: "err" });
     }
     setLoading(false);
-  }, [publicKey, governor, token, mintAmount, connection, sendTransaction, config]);
+  }, [publicKey, token, mintAmount, connection, sendTransaction]);
 
-  if (!connected) return <p className="opacity-50">Connect wallet to mint tokens.</p>;
-  if (tokens.length === 0) return <p className="opacity-50">No wrapped tokens configured.</p>;
+  if (!connected) return <p className="opacity-50">Connect wallet to use the faucet.</p>;
+  if (tokens.length === 0) return <p className="opacity-50">No tokens configured.</p>;
 
   return (
     <div className="flex flex-col gap-6">
       <p className="opacity-50 text-sm">
-        Mint KYC-wrapped d-tokens for testing. Requires admin or whitelisted wallet.
+        Mint test underlying tokens (devnet only). Then go to the <strong>Wrap</strong> tab to convert them into KYC-gated d-tokens.
       </p>
 
       {status && (
-        <div className={`alert text-sm break-all ${status.type === "ok" ? "alert-success" : status.type === "err" ? "alert-error" : "alert-info"}`}>
-          {status.msg}
+        <div role="alert" className={`alert ${status.type === "ok" ? "alert-success" : status.type === "err" ? "alert-error" : "alert-info"}`}>
+          <span className="text-sm break-all">{status.msg}</span>
         </div>
       )}
 
       {/* Balances */}
       <div className="card bg-base-200 border border-base-300 shadow-sm">
         <div className="card-body p-6 gap-4">
-          <h3 className="text-base font-semibold">Your d-Token Balances</h3>
-          <div className={`grid gap-4 text-center ${tokens.length >= 4 ? "grid-cols-4" : tokens.length === 3 ? "grid-cols-3" : tokens.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
-            {tokens.map((t) => (
-              <div key={t.symbol}>
-                <div className="text-2xl font-semibold font-mono">
-                  {balances[t.symbol] ?? "..."}
-                </div>
-                <div className="text-xs opacity-50 mt-1">
-                  <span className="text-success">d{t.symbol}</span> ({t.name})
-                </div>
-              </div>
-            ))}
+          <h3 className="card-title text-base">Your Balances</h3>
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>Token</th>
+                  <th className="text-right">Underlying</th>
+                  <th className="text-right">d-Token (wrapped)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tokens.map((t) => (
+                  <tr key={t.symbol}>
+                    <td className="font-semibold">{t.name}</td>
+                    <td className="text-right font-mono">{underlyingBalances[t.symbol] ?? "..."}</td>
+                    <td className="text-right font-mono text-success">{wrappedBalances[t.symbol] ?? "..."}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -155,39 +145,45 @@ export default function MintPanel() {
       {/* Mint Form */}
       <div className="card bg-base-200 border border-base-300 shadow-sm">
         <div className="card-body p-6 gap-4">
-          <h3 className="text-base font-semibold">Mint d-Tokens</h3>
-          <div className="flex gap-3 mb-3">
-            <select
+          <h3 className="card-title text-base">Mint Test Tokens</h3>
+          <p className="text-xs opacity-40">
+            Mints underlying tokens to your wallet. Requires the connected wallet to be the mint authority (deployer).
+          </p>
+          <div className="flex gap-3">
+            <Dropdown
               value={selectedToken}
-              onChange={(e) => setSelectedToken(Number(e.target.value))}
-              className="select select-bordered min-w-[180px]"
-            >
-              {tokens.map((t, i) => (
-                <option key={t.symbol} value={i}>d{t.symbol} — {t.name} (${t.price})</option>
-              ))}
-            </select>
+              onChange={(v) => setSelectedToken(Number(v))}
+              options={tokens.map((t, i) => ({ value: i, label: `${t.name} ($${t.price})` }))}
+              className="min-w-[180px]"
+            />
             <input
               placeholder="Amount"
               value={mintAmount}
               onChange={(e) => setMintAmount(e.target.value)}
-              type="number"
-              className="input input-bordered font-mono flex-1"
+              inputMode="decimal" pattern="[0-9.]*"
+              className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
             />
             <button
-              onClick={handleMint}
+              onClick={handleMintUnderlying}
               disabled={loading || !token}
-              className="btn btn-success"
+              className="btn btn-primary"
             >
-              {loading ? "..." : `Mint d${token?.symbol}`}
+              {loading ? "Minting..." : `Mint ${token?.name}`}
             </button>
           </div>
-          {token && (
-            <div className="grid grid-cols-2 gap-1 text-xs opacity-40">
-              <span>Wrapped Mint:</span><span className="font-mono opacity-70">{token.wrappedMint.toBase58().slice(0, 12)}...</span>
-              <span>Pool:</span><span className="font-mono opacity-70">{token.pool.toBase58().slice(0, 12)}...</span>
-              <span>Oracle Price:</span><span className="font-mono opacity-70">${token.price}</span>
-            </div>
-          )}
+        </div>
+      </div>
+
+      {/* Flow guide */}
+      <div className="card bg-base-200 border border-base-300 shadow-sm">
+        <div className="card-body p-6 gap-4">
+          <h3 className="card-title text-sm opacity-70">How it works</h3>
+          <ul className="steps steps-vertical text-sm">
+            <li className="step step-primary">Mint underlying tokens here (Faucet)</li>
+            <li className="step">Wrap them into d-tokens on the Wrap tab (requires KYC)</li>
+            <li className="step">Deposit d-tokens as collateral on the Lending tab</li>
+            <li className="step">Borrow USDC against your collateral</li>
+          </ul>
         </div>
       </div>
     </div>
