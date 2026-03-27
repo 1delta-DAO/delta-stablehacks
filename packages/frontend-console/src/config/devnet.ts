@@ -119,9 +119,11 @@ export const DEVNET_CONFIG = {
   market: {
     lendingMarket: new PublicKey("45FNL648aXgbMoMzLfYE2vCZAtWWDCky2tYLCEUztc98"),
     klendGlobalConfig: new PublicKey("BEe6HXZf6cByeb8iCxukjB8k74kJN3cVbBAGi49Hfi6W"),
-    dUsdyReserve: new PublicKey("HoEa26bHi96mwAu3joQZKcyxhG9jXyJvaxLNuvjcwZmw"),
-    usdcReserve: new PublicKey("7fYbqqcWnUvz3ffH6knnRRoRhDYaK4MgHH8Cj1Uwii4j"),
-    usdcMint: new PublicKey("6qcmJLYuJbBQscq1aB5XW9md6oUkkaoKx8XsEW5TaAgp"),
+    dUsdyReserve: new PublicKey("HhTUuM5XwpnQchiUiLVNxUjPkHtfbcX4aF4bWKCSSAuT"),
+    dUsdyOracle: new PublicKey("4Xv1RpZQHZNHatTba3xUW4foLYUM6x36NxehihVcUnPQ"),
+    usdcReserve: new PublicKey("AYhwFLgzxWwqznhxv6Bg1NVnNeoDNu9SBGLzM1W3hSfb"),
+    usdcOracle: new PublicKey("EN2FsFZFdpiFAWpKDZqeJ2PY8EyE7xzz9Ew8ZQVhtHCJ"),
+    usdcMint: new PublicKey("8iBux2LRja1PhVZph8Rw4Hi45pgkaufNEiaZma5nTD5g"),
   },
 };
 

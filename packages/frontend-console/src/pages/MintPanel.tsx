@@ -10,14 +10,16 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
+  getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
+import { BN } from "@coral-xyz/anchor";
 import { usePrograms } from "../hooks/usePrograms";
 import Dropdown from "../components/Dropdown";
 
 export default function MintPanel() {
   const { publicKey, connected, sendTransaction } = useWallet();
   const { connection } = useConnection();
-  const { config, ready } = usePrograms();
+  const { governor, config, ready } = usePrograms();
 
   const [selectedToken, setSelectedToken] = useState(0);
   const [mintAmount, setMintAmount] = useState("1000");
@@ -25,6 +27,10 @@ export default function MintPanel() {
   const [wrappedBalances, setWrappedBalances] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<{ msg: string; type: "ok" | "err" | "info" } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Mint dUSDY state
+  const [dUsdyRecipient, setDUsdyRecipient] = useState("");
+  const [dUsdyAmount, setDUsdyAmount] = useState("");
 
   const tokens = config.tokens || [];
   const token = tokens[selectedToken];
@@ -100,6 +106,54 @@ export default function MintPanel() {
     setLoading(false);
   }, [publicKey, token, mintAmount, connection, sendTransaction]);
 
+  // Mint dUSDY (wrapped token via governor)
+  const handleMintDUSDY = useCallback(async () => {
+    if (!governor || !publicKey || !dUsdyRecipient || !dUsdyAmount) return;
+    setLoading(true);
+    setStatus({ msg: "Minting dUSDY...", type: "info" });
+    try {
+      const recipient = new PublicKey(dUsdyRecipient);
+      const amount = new BN(parseFloat(dUsdyAmount) * 1e6);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        { publicKey, signTransaction: async (tx: any) => tx, signAllTransactions: async (txs: any) => txs } as any,
+        config.pool.wrappedMint,
+        recipient,
+        false,
+        "confirmed",
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+
+      const [whitelistEntry] = PublicKey.findProgramAddressSync(
+        [Buffer.from("whitelist"), config.pool.dmMintConfig.toBuffer(), recipient.toBuffer()],
+        config.programs.deltaMint
+      );
+
+      const sig = await (governor.methods as any)
+        .mintWrapped(amount)
+        .accounts({
+          authority: publicKey,
+          poolConfig: config.pool.poolConfig,
+          adminEntry: null,
+          dmMintConfig: config.pool.dmMintConfig,
+          wrappedMint: config.pool.wrappedMint,
+          dmMintAuthority: config.pool.dmMintAuthority,
+          whitelistEntry,
+          destination: ata.address,
+          deltaMintProgram: config.programs.deltaMint,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      setStatus({ msg: `Minted ${dUsdyAmount} dUSDY! Tx: ${sig.slice(0, 20)}...`, type: "ok" });
+      setDUsdyAmount("");
+    } catch (e: any) {
+      setStatus({ msg: `Mint dUSDY failed: ${e.message?.slice(0, 100)}`, type: "err" });
+    }
+    setLoading(false);
+  }, [governor, publicKey, dUsdyRecipient, dUsdyAmount, connection, config]);
+
   if (!connected) return <p className="opacity-50">Connect wallet to use the faucet.</p>;
   if (tokens.length === 0) return <p className="opacity-50">No tokens configured.</p>;
 
@@ -169,6 +223,38 @@ export default function MintPanel() {
               className="btn btn-primary"
             >
               {loading ? "Minting..." : `Mint ${token?.name}`}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mint dUSDY (wrapped tokens via governor) */}
+      <div className="card bg-base-200 border border-base-300 shadow-sm">
+        <div className="card-body p-6 gap-4">
+          <h3 className="card-title text-base">Mint dUSDY</h3>
+          <p className="text-xs opacity-40">
+            Mint KYC-wrapped dUSDY tokens to a whitelisted counterparty. Requires admin authority.
+          </p>
+          <div className="flex gap-3">
+            <input
+              placeholder="Recipient wallet"
+              value={dUsdyRecipient}
+              onChange={(e) => setDUsdyRecipient(e.target.value)}
+              className="input input-bordered bg-base-200 text-base-content font-mono flex-[2]"
+            />
+            <input
+              placeholder="Amount"
+              value={dUsdyAmount}
+              onChange={(e) => setDUsdyAmount(e.target.value)}
+              className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
+              inputMode="decimal" pattern="[0-9.]*"
+            />
+            <button
+              onClick={handleMintDUSDY}
+              disabled={loading || !dUsdyRecipient || !dUsdyAmount || !ready}
+              className="btn btn-primary whitespace-nowrap"
+            >
+              {loading ? "Minting..." : "Mint dUSDY"}
             </button>
           </div>
         </div>

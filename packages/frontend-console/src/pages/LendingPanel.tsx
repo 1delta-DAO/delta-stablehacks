@@ -22,14 +22,20 @@ import {
   lendingMarketAuthority,
   feeReceiver,
 } from "../lib/klend";
-import * as crypto from "crypto";
+
 
 const KLEND = new PublicKey("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD");
 
+const DISC: Record<string, Buffer> = {
+  refresh_reserve: Buffer.from([2, 218, 138, 235, 79, 201, 25, 102]),
+  refresh_obligation: Buffer.from([33, 132, 147, 228, 151, 192, 72, 89]),
+  deposit_reserve_liquidity_and_obligation_collateral: Buffer.from([129, 199, 4, 2, 222, 39, 26, 46]),
+  borrow_obligation_liquidity: Buffer.from([121, 127, 18, 204, 73, 245, 225, 65]),
+  init_obligation: Buffer.from([251, 10, 231, 76, 27, 11, 159, 96]),
+  init_user_metadata: Buffer.from([117, 169, 176, 69, 197, 23, 15, 162]),
+};
 function disc(name: string): Buffer {
-  return Buffer.from(
-    crypto.createHash("sha256").update(`global:${name}`).digest().subarray(0, 8)
-  );
+  return (DISC as any)[name] || Buffer.alloc(8);
 }
 
 export default function LendingPanel() {
@@ -124,7 +130,7 @@ export default function LendingPanel() {
         if (!metaInfo) {
           tx.add({
             programId: KLEND,
-            data: Buffer.concat([disc("init_user_metadata"), PublicKey.default.toBuffer()]),
+            data: Buffer.concat([DISC.init_user_metadata, PublicKey.default.toBuffer()]),
             keys: [
               { pubkey: publicKey, isSigner: true, isWritable: false },
               { pubkey: publicKey, isSigner: true, isWritable: true },
@@ -138,7 +144,7 @@ export default function LendingPanel() {
         // InitObligation
         tx.add({
           programId: KLEND,
-          data: Buffer.concat([disc("init_obligation"), Buffer.from([0, 0])]),
+          data: Buffer.concat([DISC.init_obligation, Buffer.from([0, 0])]),
           keys: [
             { pubkey: publicKey, isSigner: true, isWritable: false },
             { pubkey: publicKey, isSigner: true, isWritable: true },
@@ -156,7 +162,7 @@ export default function LendingPanel() {
       // RefreshReserve → RefreshObligation → Deposit
       tx.add(buildRefreshReserveIx(reserve, market, oracle));
       tx.add({
-        programId: KLEND, data: disc("refresh_obligation"),
+        programId: KLEND, data: DISC.refresh_obligation,
         keys: [
           { pubkey: market, isSigner: false, isWritable: false },
           { pubkey: obPda, isSigner: false, isWritable: true },
@@ -166,7 +172,7 @@ export default function LendingPanel() {
       });
       tx.add({
         programId: KLEND,
-        data: Buffer.concat([disc("deposit_reserve_liquidity_and_obligation_collateral"), amount]),
+        data: Buffer.concat([DISC.deposit_reserve_liquidity_and_obligation_collateral, amount]),
         keys: [
           { pubkey: publicKey, isSigner: true, isWritable: true },
           { pubkey: obPda, isSigner: false, isWritable: true },
@@ -227,7 +233,7 @@ export default function LendingPanel() {
       tx.add(buildRefreshReserveIx(dUsdyReserve, market, dUsdyOracle));
       tx.add(buildRefreshReserveIx(usdcReserve, market, usdcOracle));
       tx.add({
-        programId: KLEND, data: disc("refresh_obligation"),
+        programId: KLEND, data: DISC.refresh_obligation,
         keys: [
           { pubkey: market, isSigner: false, isWritable: false },
           { pubkey: obPda, isSigner: false, isWritable: true },
@@ -236,7 +242,7 @@ export default function LendingPanel() {
       });
       tx.add({
         programId: KLEND,
-        data: Buffer.concat([disc("borrow_obligation_liquidity"), amount]),
+        data: Buffer.concat([DISC.borrow_obligation_liquidity, amount]),
         keys: [
           { pubkey: publicKey, isSigner: true, isWritable: false },
           { pubkey: obPda, isSigner: false, isWritable: true },

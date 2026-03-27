@@ -1,8 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
-import { TOKEN_2022_PROGRAM_ID, getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
-import { BN } from "@coral-xyz/anchor";
+import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { usePrograms } from "../hooks/usePrograms";
 
 export default function AdminPanel() {
@@ -11,8 +9,6 @@ export default function AdminPanel() {
   const { governor, config, ready } = usePrograms();
 
   const [whitelistAddr, setWhitelistAddr] = useState("");
-  const [mintAmount, setMintAmount] = useState("");
-  const [mintRecipient, setMintRecipient] = useState("");
   const [status, setStatus] = useState<{ msg: string; type: "info" | "ok" | "err" } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -56,58 +52,6 @@ export default function AdminPanel() {
     setLoading(false);
   }, [governor, publicKey, whitelistAddr, config]);
 
-  // --- Mint dUSDY ---
-  const handleMint = useCallback(async () => {
-    if (!governor || !publicKey || !mintRecipient || !mintAmount) return;
-    setLoading(true);
-    showStatus("Minting dUSDY...");
-    try {
-      const recipient = new PublicKey(mintRecipient);
-      const amount = new BN(parseFloat(mintAmount) * 1e6);
-
-      // Ensure recipient has a dUSDY ATA
-      const ata = await getOrCreateAssociatedTokenAccount(
-        connection,
-        // We can't sign with the wallet adapter for getOrCreateAssociatedTokenAccount,
-        // so we just compute the ATA address
-        { publicKey, signTransaction: async (tx: any) => tx, signAllTransactions: async (txs: any) => txs } as any,
-        config.pool.wrappedMint,
-        recipient,
-        false,
-        "confirmed",
-        undefined,
-        TOKEN_2022_PROGRAM_ID,
-      );
-
-      const [whitelistEntry] = PublicKey.findProgramAddressSync(
-        [Buffer.from("whitelist"), config.pool.dmMintConfig.toBuffer(), recipient.toBuffer()],
-        config.programs.deltaMint
-      );
-
-      const mintAccounts: any = {
-        authority: publicKey,
-        poolConfig: config.pool.poolConfig,
-        adminEntry: isRootAuthority ? null : adminEntry,
-        dmMintConfig: config.pool.dmMintConfig,
-        wrappedMint: config.pool.wrappedMint,
-        dmMintAuthority: config.pool.dmMintAuthority,
-        whitelistEntry,
-        destination: ata.address,
-        deltaMintProgram: config.programs.deltaMint,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      };
-
-      const sig = await (governor.methods as any)
-        .mintWrapped(amount)
-        .accounts(mintAccounts)
-        .rpc();
-      showStatus(`Minted ${mintAmount} dUSDY! Tx: ${sig.slice(0, 20)}...`, "ok");
-      setMintAmount("");
-    } catch (e: any) {
-      showStatus(`Mint failed: ${e.message}`, "err");
-    }
-    setLoading(false);
-  }, [governor, publicKey, mintRecipient, mintAmount, connection, config]);
 
   const rootAuthority = "AhKNmBmaeq6XrrEyGnSQne3WeU4SoN7hSAGieTiqPaJX";
   const isRootAuthority = publicKey?.toBase58() === rootAuthority;
@@ -163,7 +107,7 @@ export default function AdminPanel() {
       )}
 
       {/* KYC Whitelist */}
-      <Card title="1. KYC Whitelist Management">
+      <Card title="KYC Whitelist Management">
         <p className="opacity-50 text-sm mb-3">
           Add a wallet to the KYC whitelist to allow them to hold dUSDY.
         </p>
@@ -175,29 +119,6 @@ export default function AdminPanel() {
             className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
           />
           <ActionButton label="Whitelist" onClick={handleWhitelist} disabled={loading || !whitelistAddr || !isAuthority} />
-        </div>
-      </Card>
-
-      {/* Mint Tokens */}
-      <Card title="2. Mint dUSDY">
-        <p className="opacity-50 text-sm mb-3">
-          Mint dUSDY tokens to a whitelisted counterparty.
-        </p>
-        <div className="flex gap-3">
-          <input
-            placeholder="Recipient wallet"
-            value={mintRecipient}
-            onChange={(e) => setMintRecipient(e.target.value)}
-            className="input input-bordered bg-base-200 text-base-content font-mono flex-[2]"
-          />
-          <input
-            placeholder="Amount"
-            value={mintAmount}
-            onChange={(e) => setMintAmount(e.target.value)}
-            className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
-            inputMode="decimal" pattern="[0-9.]*"
-          />
-          <ActionButton label="Mint" onClick={handleMint} disabled={loading || !mintRecipient || !mintAmount || !isAuthority} />
         </div>
       </Card>
 

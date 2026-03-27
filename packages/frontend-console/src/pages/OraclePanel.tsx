@@ -9,7 +9,7 @@ import {
 } from "@solana/web3.js";
 import { usePrograms } from "../hooks/usePrograms";
 import { Program, BN } from "@coral-xyz/anchor";
-import * as crypto from "crypto";
+
 
 const MOCK_ORACLE = new PublicKey("7qABPpPwvS7u7Y5vgDKZdSqLnc6N9FasVnG2iv7qe4vm");
 const PRICE_UPDATE_V2_DISC = Buffer.from("22f123639d7ef4cd", "hex");
@@ -156,7 +156,7 @@ export default function OraclePanel() {
       // Step 2: Write PriceUpdateV2 data via writeRaw
       const data = buildPriceUpdateV2(publicKey, price, -8, slot, ts);
       const writeRawDisc = Buffer.from(
-        crypto.createHash("sha256").update("global:write_raw").digest().subarray(0, 8)
+        [65, 49, 227, 253, 55, 157, 222, 246]
       );
       // Borsh encode: offset(u32) + data(vec<u8> = len(u32) + bytes)
       const writeArgs = Buffer.alloc(4 + 4 + data.length);
@@ -209,7 +209,7 @@ export default function OraclePanel() {
       const data = buildPriceUpdateV2(publicKey, price, -8, slot, ts);
 
       const writeRawDisc = Buffer.from(
-        crypto.createHash("sha256").update("global:write_raw").digest().subarray(0, 8)
+        [65, 49, 227, 253, 55, 157, 222, 246]
       );
       const writeArgs = Buffer.alloc(4 + 4 + data.length);
       writeArgs.writeUInt32LE(0, 0);

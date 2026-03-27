@@ -1,4 +1,6 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::program::invoke;
+use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
 use anchor_spl::token_interface;
 use delta_mint::cpi as delta_cpi;
 use delta_mint::cpi::accounts as delta_accounts;
@@ -468,6 +470,92 @@ pub mod governor {
         ctx.accounts.pool_config.status = status;
         Ok(())
     }
+
+    /// Set the borrow rate curve on a klend reserve via CPI.
+    /// Authority must be both pool authority (or admin) AND the klend market owner.
+    /// The curve is validated for monotonicity and bounds before forwarding to klend.
+    pub fn set_borrow_rate_curve(
+        ctx: Context<SetBorrowRateCurve>,
+        reserve_type: ReserveType,
+        curve: BorrowRateCurve,
+    ) -> Result<()> {
+        let pool = &ctx.accounts.pool_config;
+        require!(
+            pool.status == PoolStatus::Active,
+            GovernorError::PoolNotActive
+        );
+
+        // Validate the reserve address matches the pool config
+        let expected_reserve = match reserve_type {
+            ReserveType::Collateral => pool.collateral_reserve,
+            ReserveType::Borrow => pool.borrow_reserve,
+        };
+        require!(
+            ctx.accounts.reserve.key() == expected_reserve,
+            GovernorError::ReserveMismatch
+        );
+        require!(
+            ctx.accounts.lending_market.key() == pool.lending_market,
+            GovernorError::MarketMismatch
+        );
+
+        // Validate the curve
+        curve.validate()?;
+
+        // Serialize the 11-point curve into 88 bytes
+        let mut curve_data = [0u8; 88];
+        for (i, point) in curve.points.iter().enumerate() {
+            let offset = i * 8;
+            curve_data[offset..offset + 4].copy_from_slice(&point.utilization_rate_bps.to_le_bytes());
+            curve_data[offset + 4..offset + 8].copy_from_slice(&point.borrow_rate_bps.to_le_bytes());
+        }
+
+        // Build klend updateReserveConfig instruction data:
+        //   disc(8) + mode(u8) + vec_len(u32) + curve(88) + skip_validation(u8)
+        // sha256("global:update_reserve_config")[0..8]
+        let disc: [u8; 8] = [0x3d, 0x94, 0x64, 0x46, 0x8f, 0x6b, 0x11, 0x0d];
+        let mode: u8 = 23; // UpdateBorrowRateCurve
+        let vec_len: u32 = 88;
+        let skip_validation: u8 = 1; // skip klend config integrity check (governor validates the curve itself)
+
+        let mut data = Vec::with_capacity(8 + 1 + 4 + 88 + 1);
+        data.extend_from_slice(&disc);
+        data.push(mode);
+        data.extend_from_slice(&vec_len.to_le_bytes());
+        data.extend_from_slice(&curve_data);
+        data.push(skip_validation);
+
+        // CPI into klend — authority signs the outer tx and the signature passes through
+        let ix = Instruction {
+            program_id: ctx.accounts.klend_program.key(),
+            accounts: vec![
+                AccountMeta::new_readonly(ctx.accounts.authority.key(), true),
+                AccountMeta::new_readonly(ctx.accounts.klend_global_config.key(), false),
+                AccountMeta::new_readonly(ctx.accounts.lending_market.key(), false),
+                AccountMeta::new(ctx.accounts.reserve.key(), false),
+            ],
+            data,
+        };
+
+        invoke(
+            &ix,
+            &[
+                ctx.accounts.authority.to_account_info(),
+                ctx.accounts.klend_global_config.to_account_info(),
+                ctx.accounts.lending_market.to_account_info(),
+                ctx.accounts.reserve.to_account_info(),
+                ctx.accounts.klend_program.to_account_info(),
+            ],
+        )?;
+
+        emit!(BorrowRateCurveUpdated {
+            pool: ctx.accounts.pool_config.key(),
+            reserve: ctx.accounts.reserve.key(),
+            reserve_type,
+        });
+
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -810,6 +898,40 @@ pub struct UnwrapTokens<'info> {
     pub wrapped_token_program: Interface<'info, token_interface::TokenInterface>,
 }
 
+/// Set borrow rate curve on a klend reserve — root authority OR admin.
+/// Authority must also be the klend market owner.
+#[derive(Accounts)]
+pub struct SetBorrowRateCurve<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        constraint = is_authorized(
+            &authority.key(),
+            &pool_config.authority,
+            &pool_config.key(),
+            &admin_entry,
+        ) @ GovernorError::Unauthorized
+    )]
+    pub pool_config: Account<'info, PoolConfig>,
+
+    /// Optional admin PDA. Pass if signer is not root authority.
+    pub admin_entry: Option<Account<'info, AdminEntry>>,
+
+    /// CHECK: klend lending market — validated against pool_config.
+    pub lending_market: UncheckedAccount<'info>,
+
+    /// CHECK: klend reserve to update — validated against pool_config.
+    #[account(mut)]
+    pub reserve: UncheckedAccount<'info>,
+
+    /// CHECK: klend global config account.
+    pub klend_global_config: UncheckedAccount<'info>,
+
+    /// CHECK: klend program — invoked via CPI.
+    pub klend_program: UncheckedAccount<'info>,
+}
+
 /// Mint wrapped tokens — root authority OR admin (legacy, mints without backing).
 #[derive(Accounts)]
 pub struct MintWrapped<'info> {
@@ -910,6 +1032,66 @@ pub enum ParticipantRole {
     Liquidator,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum ReserveType {
+    Collateral,
+    Borrow,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
+pub struct CurvePoint {
+    pub utilization_rate_bps: u32,
+    pub borrow_rate_bps: u32,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct BorrowRateCurve {
+    pub points: [CurvePoint; 11],
+}
+
+impl BorrowRateCurve {
+    pub fn validate(&self) -> Result<()> {
+        // First point must start at 0% utilization
+        require!(
+            self.points[0].utilization_rate_bps == 0,
+            GovernorError::InvalidCurve
+        );
+        // Last point must be at 100% utilization
+        require!(
+            self.points[10].utilization_rate_bps == 10_000,
+            GovernorError::InvalidCurve
+        );
+
+        for i in 0..11 {
+            // Utilization must be in [0, 10000]
+            require!(
+                self.points[i].utilization_rate_bps <= 10_000,
+                GovernorError::InvalidCurve
+            );
+            // Borrow rate cap: 5000 bps = 50% APR (klend devnet max)
+            require!(
+                self.points[i].borrow_rate_bps <= 5_000,
+                GovernorError::InvalidCurve
+            );
+        }
+
+        for i in 1..11 {
+            // Utilization must be strictly increasing (klend rejects duplicates)
+            require!(
+                self.points[i].utilization_rate_bps > self.points[i - 1].utilization_rate_bps,
+                GovernorError::InvalidCurve
+            );
+            // Borrow rate must be strictly increasing (klend rejects flat segments)
+            require!(
+                self.points[i].borrow_rate_bps > self.points[i - 1].borrow_rate_bps,
+                GovernorError::InvalidCurve
+            );
+        }
+
+        Ok(())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
@@ -945,6 +1127,13 @@ pub struct UnwrapEvent {
     pub wrapped_amount: u64,
 }
 
+#[event]
+pub struct BorrowRateCurveUpdated {
+    pub pool: Pubkey,
+    pub reserve: Pubkey,
+    pub reserve_type: ReserveType,
+}
+
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
@@ -961,4 +1150,10 @@ pub enum GovernorError {
     SelfRegisterDisabled,
     #[msg("Invalid or expired Civic gateway token")]
     InvalidGatewayToken,
+    #[msg("Reserve address does not match pool config")]
+    ReserveMismatch,
+    #[msg("Lending market does not match pool config")]
+    MarketMismatch,
+    #[msg("Invalid borrow rate curve: must be sorted, bounded, start at 0% and end at 100%")]
+    InvalidCurve,
 }

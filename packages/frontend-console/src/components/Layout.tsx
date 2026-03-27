@@ -6,14 +6,16 @@ import OraclePanel from "../pages/OraclePanel";
 import MintPanel from "../pages/MintPanel";
 import MarketPanel from "../pages/MarketPanel";
 import WrapPanel from "../pages/WrapPanel";
+import RateCurvePanel from "../pages/RateCurvePanel";
 
-type Tab = "admin" | "wrap" | "lending" | "oracles" | "mint" | "market";
+type Tab = "admin" | "wrap" | "lending" | "oracles" | "mint" | "market" | "rates";
 
 const tabs: { key: Tab; label: string; desc: string }[] = [
   { key: "admin", label: "Governance", desc: "KYC & Admin" },
   { key: "wrap", label: "Wrap", desc: "KYC Collateral" },
   { key: "mint", label: "Faucet", desc: "Test Tokens" },
   { key: "market", label: "Markets", desc: "Reserves" },
+  { key: "rates", label: "Rate Curves", desc: "IRM Config" },
   { key: "lending", label: "Lending", desc: "Borrow / Deposit" },
   { key: "oracles", label: "Oracles", desc: "Price Feeds" },
 ];
@@ -127,6 +129,7 @@ export default function Layout() {
         {tab === "wrap" && <WrapPanel />}
         {tab === "mint" && <MintPanel />}
         {tab === "market" && <MarketPanel />}
+        {tab === "rates" && <RateCurvePanel />}
         {tab === "lending" && <LendingPanel />}
         {tab === "oracles" && <OraclePanel />}
       </div>

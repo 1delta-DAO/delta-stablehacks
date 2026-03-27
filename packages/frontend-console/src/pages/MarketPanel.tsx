@@ -17,7 +17,7 @@ import {
   getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 import { usePrograms } from "../hooks/usePrograms";
-import * as crypto from "crypto";
+
 import Dropdown from "../components/Dropdown";
 import {
   reserveLiquiditySupply,
@@ -32,8 +32,13 @@ const KLEND = new PublicKey("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD");
 const KLEND_GLOBAL = new PublicKey("BEe6HXZf6cByeb8iCxukjB8k74kJN3cVbBAGi49Hfi6W");
 const MOCK_ORACLE = new PublicKey("7qABPpPwvS7u7Y5vgDKZdSqLnc6N9FasVnG2iv7qe4vm");
 
+const DISC: Record<string, Buffer> = {
+  update_reserve_config: Buffer.from([61, 148, 100, 70, 143, 107, 17, 13]),
+  refresh_reserve: Buffer.from([2, 218, 138, 235, 79, 201, 25, 102]),
+  init_reserve: Buffer.from([138, 245, 71, 225, 153, 4, 3, 43]),
+};
 function disc(name: string): Buffer {
-  return Buffer.from(crypto.createHash("sha256").update(`global:${name}`).digest().subarray(0, 8));
+  return (DISC as any)[name] || Buffer.alloc(8);
 }
 
 interface ReserveStatus {
@@ -43,6 +48,9 @@ interface ReserveStatus {
   refreshOk: boolean | null;
   depositLimit: string;
   borrowLimit: string;
+  ltv: string;
+  liqThreshold: string;
+  status: string;
 }
 
 export default function MarketPanel() {
@@ -54,44 +62,104 @@ export default function MarketPanel() {
   const [selectedToken, setSelectedToken] = useState(0);
   const [status, setStatus] = useState<{ msg: string; type: "ok" | "err" | "info" } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [configTarget, setConfigTarget] = useState<string>("");
-  const [configMode, setConfigMode] = useState("8"); // depositLimit
+  const [configTarget, setConfigTarget] = useState<string>("3FkBgVfnYBnUre6GMQZv8w4dDM1x7Fp5RiGk96kZ5mVs");
+  const [configMode, setConfigMode] = useState("0"); // LTV
   const [configValue, setConfigValue] = useState("");
+  const [currentParams, setCurrentParams] = useState<Record<string, string>>({});
+  const isMarketAuthority = publicKey?.toBase58() === "AhKNmBmaeq6XrrEyGnSQne3WeU4SoN7hSAGieTiqPaJX";
 
   const tokens = config.tokens || [];
   const market = config.market.lendingMarket;
+
+  // Load current reserve parameters when target changes
+  useEffect(() => {
+    if (!configTarget || configTarget.length < 32) { setCurrentParams({}); return; }
+    (async () => {
+      try {
+        const reservePk = new PublicKey(configTarget);
+        const info = await connection.getAccountInfo(reservePk);
+        if (!info || info.data.length < 8624) { setCurrentParams({}); return; }
+        const data = info.data;
+        const ltvPct = data[4872];
+        const liqThreshPct = data[4873];
+        const depositLimit = data.readBigUInt64LE(5016);
+        const borrowLimit = data.readBigUInt64LE(5024);
+        const nameBytes = data.subarray(5032, 5064);
+        const name = Buffer.from(nameBytes).toString().replace(/\0/g, "");
+        const status = data[4861];
+        setCurrentParams({
+          name: name || "(empty)",
+          ltv: ltvPct + "%",
+          liqThreshold: liqThreshPct + "%",
+          status: ["Active", "Obsolete", "Hidden"][status] || String(status),
+          depositLimit: Number(depositLimit) > 1e12 ? "∞" : (Number(depositLimit) / 1e6).toFixed(0),
+          borrowLimit: Number(borrowLimit) > 1e12 ? "∞" : (Number(borrowLimit) / 1e6).toFixed(0),
+        });
+      } catch { setCurrentParams({}); }
+    })();
+  }, [configTarget, connection]);
 
   const showStatus = (msg: string, type: "ok" | "err" | "info") => {
     setStatus({ msg, type });
     if (type !== "info") setTimeout(() => setStatus(null), 10000);
   };
 
-  // Load existing reserves
+  // Load existing reserves with full params
   useEffect(() => {
     if (!ready) return;
     const loadReserves = async () => {
       const results: ReserveStatus[] = [];
-      // Check known reserves
-      for (const [sym, addr] of [
-        ["dUSDY (legacy)", config.market.dUsdyReserve.toBase58()],
-        ["USDC", config.market.usdcReserve.toBase58()],
-      ]) {
-        const info = await connection.getAccountInfo(new PublicKey(addr)).catch(() => null);
-        if (info) {
+      const knownReserves = [
+        ["deUSX", "3FkBgVfnYBnUre6GMQZv8w4dDM1x7Fp5RiGk96kZ5mVs"],
+        ["dtUSDY", "HhTUuM5XwpnQchiUiLVNxUjPkHtfbcX4aF4bWKCSSAuT"],
+        ["sUSDC", "AYhwFLgzxWwqznhxv6Bg1NVnNeoDNu9SBGLzM1W3hSfb"],
+      ];
+
+      // Read reserve config from raw bytes at known absolute offsets
+      // Found empirically from on-chain data:
+      //   LTV:            4872 (u8)
+      //   LiqThreshold:   4873 (u8)
+      //   BorrowFactor:   5008 (u64)
+      //   DepositLimit:   5016 (u64)
+      //   BorrowLimit:    5024 (u64)
+      //   Name:           5032 (32 bytes)
+      //   Status:         4861 (u8) — approximate
+
+      for (const [sym, addr] of knownReserves) {
+        try {
+          const info = await connection.getAccountInfo(new PublicKey(addr));
+          if (!info || info.data.length < 8624) continue;
+          const data = info.data;
+
+          const ltvPct = data[4872];
+          const liqThreshPct = data[4873];
+          const depositLimit = data.readBigUInt64LE(5016);
+          const borrowLimit = data.readBigUInt64LE(5024);
+          const nameBytes = data.subarray(5032, 5064);
+          const name = Buffer.from(nameBytes).toString().replace(/\0/g, "") || sym;
+
+          // Status: scan nearby for non-zero to find it, or read from 4861
+          const status = data[4861];
+
           results.push({
             address: addr,
-            tokenSymbol: sym,
+            tokenSymbol: name || sym,
             oracle: "—",
-            refreshOk: null,
-            depositLimit: "—",
-            borrowLimit: "—",
+            refreshOk: null, // skip simulation for now
+            depositLimit: depositLimit.toString(),
+            borrowLimit: borrowLimit.toString(),
+            ltv: ltvPct + "%",
+            liqThreshold: liqThreshPct + "%",
+            status: ["Active", "Obsolete", "Hidden"][status] || String(status),
           });
+        } catch (e) {
+          console.warn("Failed to load reserve", sym, addr, e);
         }
       }
       setReserves(results);
     };
     loadReserves();
-  }, [ready, connection, config]);
+  }, [ready, connection, config, market]);
 
   // Create reserve for a wrapped token
   const handleCreateReserve = useCallback(async () => {
@@ -131,7 +199,7 @@ export default function MarketPanel() {
       const [lma] = PublicKey.findProgramAddressSync([Buffer.from("lma"), market.toBuffer()], KLEND);
       tx.add({
         programId: KLEND,
-        data: disc("init_reserve"),
+        data: DISC.init_reserve,
         keys: [
           { pubkey: publicKey, isSigner: true, isWritable: true },
           { pubkey: market, isSigner: false, isWritable: false },
@@ -178,7 +246,7 @@ export default function MarketPanel() {
         cfgTx.add(ComputeBudgetProgram.requestHeapFrame({ bytes: 262144 }));
         cfgTx.add({
           programId: KLEND,
-          data: Buffer.concat([disc("update_reserve_config"), ixData]),
+          data: Buffer.concat([DISC.update_reserve_config, ixData]),
           keys: [
             { pubkey: publicKey, isSigner: true, isWritable: false },
             { pubkey: KLEND_GLOBAL, isSigner: false, isWritable: false },
@@ -210,7 +278,7 @@ export default function MarketPanel() {
         limTx.add(ComputeBudgetProgram.requestHeapFrame({ bytes: 262144 }));
         limTx.add({
           programId: KLEND,
-          data: Buffer.concat([disc("update_reserve_config"), ixData]),
+          data: Buffer.concat([DISC.update_reserve_config, ixData]),
           keys: [
             { pubkey: publicKey, isSigner: true, isWritable: false },
             { pubkey: KLEND_GLOBAL, isSigner: false, isWritable: false },
@@ -240,8 +308,11 @@ export default function MarketPanel() {
         tokenSymbol: `d${token.symbol}`,
         oracle: token.oracle.toBase58(),
         refreshOk: true,
-        depositLimit: "1B",
-        borrowLimit: "1B",
+        depositLimit: "1000000000000000",
+        borrowLimit: "1000000000000000",
+        ltv: "75%",
+        liqThreshold: "85%",
+        status: "Active",
       }]);
     } catch (e: any) {
       showStatus(`Failed: ${e.message?.slice(0, 100)}`, "err");
@@ -274,14 +345,14 @@ export default function MarketPanel() {
       ixData.writeUInt8(mode, 0);
       ixData.writeUInt32LE(value.length, 1);
       value.copy(ixData, 5);
-      ixData.writeUInt8(0, 13); // skip=false
+      ixData.writeUInt8(0, 5 + value.length); // skip=false (at end of value)
 
       const tx = new Transaction();
       tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1400000 }));
       tx.add(ComputeBudgetProgram.requestHeapFrame({ bytes: 262144 }));
       tx.add({
         programId: KLEND,
-        data: Buffer.concat([disc("update_reserve_config"), ixData]),
+        data: Buffer.concat([DISC.update_reserve_config, ixData]),
         keys: [
           { pubkey: publicKey, isSigner: true, isWritable: false },
           { pubkey: KLEND_GLOBAL, isSigner: false, isWritable: false },
@@ -325,23 +396,34 @@ export default function MarketPanel() {
                 <thead>
                   <tr>
                     <th>Token</th>
+                    <th>LTV</th>
+                    <th>Liq Thresh</th>
+                    <th>Deposit Limit</th>
+                    <th>Refresh</th>
                     <th className="text-right">Address</th>
-                    <th className="text-right">Refresh</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {reserves.map((r) => (
-                    <tr key={r.address}>
+                    <tr key={r.address} className={configTarget === r.address ? "bg-primary/10" : "hover"}>
                       <td className="font-semibold">{r.tokenSymbol}</td>
-                      <td
-                        className="text-right font-mono text-xs opacity-60 cursor-pointer"
-                        onClick={() => setConfigTarget(r.address)}
-                        title={r.address}
-                      >
+                      <td className="font-mono text-xs">{r.ltv || "?"}</td>
+                      <td className="font-mono text-xs">{r.liqThreshold || "?"}</td>
+                      <td className="font-mono text-xs">{r.depositLimit ? (Number(r.depositLimit) > 1e12 ? "∞" : (Number(r.depositLimit) / 1e6).toFixed(0)) : "?"}</td>
+                      <td className={r.refreshOk === true ? "text-success" : r.refreshOk === false ? "text-error" : "opacity-50"}>
+                        {r.refreshOk === null ? "?" : r.refreshOk ? "✓" : "✗"}
+                      </td>
+                      <td className="text-right font-mono text-xs opacity-60" title={r.address}>
                         {r.address.slice(0, 10)}...
                       </td>
-                      <td className={`text-right ${r.refreshOk === true ? "text-success" : r.refreshOk === false ? "text-error" : "opacity-50"}`}>
-                        {r.refreshOk === null ? "?" : r.refreshOk ? "OK" : "FAIL"}
+                      <td>
+                        <button
+                          className={`btn btn-xs ${configTarget === r.address ? "btn-primary" : "btn-ghost"}`}
+                          onClick={() => setConfigTarget(r.address)}
+                        >
+                          {configTarget === r.address ? "Selected" : "Configure"}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -377,56 +459,102 @@ export default function MarketPanel() {
         </div>
       </div>
 
-      {/* Update Reserve Config */}
-      <div className="card bg-base-200 border border-base-300 shadow-sm">
-        <div className="card-body p-6 gap-4">
-          <h3 className="text-base font-semibold">Update Reserve Config</h3>
-          <p className="opacity-40 text-xs mb-3">
-            Click a reserve address above to select it. Then choose a config mode and value.
-          </p>
-          <div className="flex gap-3 mb-2">
-            <input
-              placeholder="Reserve address"
-              value={configTarget}
-              onChange={(e) => setConfigTarget(e.target.value)}
-              className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
-            />
-          </div>
-          <div className="flex gap-3">
-            <Dropdown
-              value={configMode}
-              onChange={(v) => setConfigMode(String(v))}
-              options={[
-                { value: "0", label: "LTV % (0-99)" },
-                { value: "2", label: "Liquidation Threshold %" },
-                { value: "8", label: "Deposit Limit (u64)" },
-                { value: "9", label: "Borrow Limit (u64)" },
-                { value: "16", label: "Token Name (string)" },
-                { value: "17", label: "Price Max Age (seconds)" },
-                { value: "20", label: "Pyth Oracle (pubkey)" },
-                { value: "23", label: "Borrow Rate Curve" },
-                { value: "32", label: "Borrow Factor (min 100)" },
-                { value: "38", label: "Reserve Status (0=Active)" },
-                { value: "44", label: "Borrow Limit Outside EG" },
-              ]}
-              className="min-w-[220px]"
-            />
-            <input
-              placeholder="Value"
-              value={configValue}
-              onChange={(e) => setConfigValue(e.target.value)}
-              className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
-            />
-            <button
-              onClick={handleUpdateConfig}
-              disabled={loading || !configTarget || !configValue}
-              className="btn btn-success"
-            >
-              Update
+      {/* Edit Selected Reserve */}
+      {configTarget && (
+        <div className="card bg-base-200 border border-primary/30 shadow-sm">
+          <div className="card-body p-6 gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold">
+                  Edit Reserve: {reserves.find(r => r.address === configTarget)?.tokenSymbol || "Unknown"}
+                </h3>
+                <p className="font-mono text-xs opacity-40 mt-1">{configTarget}</p>
+              </div>
+              {connected && (
+                isMarketAuthority
+                  ? <span className="badge badge-success badge-sm gap-1">Authority ✓</span>
+                  : <span className="badge badge-error badge-sm gap-1">Not Authority</span>
+              )}
+            </div>
+
+            {!isMarketAuthority && connected && (
+              <div className="alert alert-warning text-xs py-2">
+                Only the market authority can update configs. Connect: <code className="font-mono">AhKN...aJX</code>
+              </div>
+            )}
+
+            {/* Current parameters */}
+            {Object.keys(currentParams).length > 0 && (
+              <div className="bg-base-300 rounded-lg p-4">
+                <div className="text-xs font-semibold opacity-50 mb-2">Current Parameters</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  {Object.entries(currentParams).map(([k, v]) => (
+                    <div key={k} className="flex flex-col">
+                      <span className="text-xs opacity-40">{k}</span>
+                      <span className="font-mono font-bold">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Edit form */}
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <Dropdown
+                  value={configMode}
+                  onChange={(v) => setConfigMode(String(v))}
+                  options={[
+                    { value: "0", label: "LTV % (0-99)" },
+                    { value: "2", label: "Liquidation Threshold % (LTV-100)" },
+                    { value: "8", label: "Deposit Limit (lamports)" },
+                    { value: "9", label: "Borrow Limit (lamports)" },
+                    { value: "16", label: "Token Name (string)" },
+                    { value: "17", label: "Price Max Age (seconds)" },
+                    { value: "20", label: "Pyth Oracle (pubkey)" },
+                    { value: "32", label: "Borrow Factor (min 100)" },
+                    { value: "38", label: "Reserve Status (0=Active, 2=Hidden)" },
+                    { value: "44", label: "Borrow Limit Outside EG (lamports)" },
+                  ]}
+                  className="min-w-[240px]"
+                />
+                <input
+                  placeholder="New value"
+                  value={configValue}
+                  onChange={(e) => setConfigValue(e.target.value)}
+                  className="input input-bordered bg-base-200 text-base-content font-mono flex-1"
+                />
+                <button
+                  onClick={handleUpdateConfig}
+                  disabled={loading || !configValue || !isMarketAuthority}
+                  className="btn btn-success"
+                >
+                  {loading ? <span className="loading loading-spinner loading-sm" /> : "Apply"}
+                </button>
+              </div>
+
+              {/* Validation hints */}
+              {configMode === "0" && currentParams.liqThreshold && (
+                <div className="text-xs text-warning">
+                  LTV must be &lt; liquidation threshold ({currentParams.liqThreshold}). Max: {parseInt(currentParams.liqThreshold) - 1}
+                </div>
+              )}
+              {configMode === "2" && currentParams.ltv && (
+                <div className="text-xs text-warning">
+                  Must be ≥ LTV ({currentParams.ltv}) and ≤ 100
+                </div>
+              )}
+              {configMode === "32" && (
+                <div className="text-xs text-warning">Must be ≥ 100</div>
+              )}
+            </div>
+
+            <button className="btn btn-ghost btn-xs self-start opacity-50" onClick={() => setConfigTarget("")}>
+              ✕ Deselect reserve
             </button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Market Info */}
       <div className="card bg-base-200 border border-base-300 shadow-sm">

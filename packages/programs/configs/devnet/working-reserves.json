@@ -1,8 +1,9 @@
 {
-  "usdcReserve": "7fYbqqcWnUvz3ffH6knnRRoRhDYaK4MgHH8Cj1Uwii4j",
-  "usdcMint": "6qcmJLYuJbBQscq1aB5XW9md6oUkkaoKx8XsEW5TaAgp",
-  "usdcOracle": "CRhtYFcS32PBbRBrP31JafW15DpPpydZPKMnbkyuiD7W",
-  "dUsdyReserve": "HoEa26bHi96mwAu3joQZKcyxhG9jXyJvaxLNuvjcwZmw",
-  "dUsdyOracle": "EZxvCYEjyogA2R1Eppz1AWyxhgjZWs4nXQRk3RC2yRLt",
-  "market": "45FNL648aXgbMoMzLfYE2vCZAtWWDCky2tYLCEUztc98"
+  "market": "45FNL648aXgbMoMzLfYE2vCZAtWWDCky2tYLCEUztc98",
+  "dUsdyReserve": "HhTUuM5XwpnQchiUiLVNxUjPkHtfbcX4aF4bWKCSSAuT",
+  "dUsdyOracle": "4Xv1RpZQHZNHatTba3xUW4foLYUM6x36NxehihVcUnPQ",
+  "usdcReserve": "AYhwFLgzxWwqznhxv6Bg1NVnNeoDNu9SBGLzM1W3hSfb",
+  "usdcMint": "8iBux2LRja1PhVZph8Rw4Hi45pgkaufNEiaZma5nTD5g",
+  "usdcOracle": "EN2FsFZFdpiFAWpKDZqeJ2PY8EyE7xzz9Ew8ZQVhtHCJ",
+  "note": "Updated per IRM_NOTES.md — stranded reserves removed"
 }
