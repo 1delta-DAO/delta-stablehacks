@@ -102,8 +102,48 @@ pub mod governor {
         Ok(())
     }
 
+    /// Add a participant via pool PDA (for pools where wrapping is activated).
+    /// The pool PDA signs as the delta-mint authority (since authority was transferred).
+    /// Can be called by root authority OR any admin.
+    pub fn add_participant_via_pool(
+        ctx: Context<AddParticipantViaPool>,
+        role: ParticipantRole,
+    ) -> Result<()> {
+        let underlying = ctx.accounts.pool_config.underlying_mint;
+        let bump = ctx.accounts.pool_config.bump;
+        let seeds = &[b"pool".as_ref(), underlying.as_ref(), &[bump]];
+
+        let cpi_program = ctx.accounts.delta_mint_program.to_account_info();
+        // Use co_authority path — pool PDA is both authority AND co_authority after activate_wrapping
+        let cpi_accounts = delta_accounts::AddToWhitelistCoAuth {
+            co_authority: ctx.accounts.pool_config.to_account_info(),
+            payer: ctx.accounts.authority.to_account_info(),
+            mint_config: ctx.accounts.dm_mint_config.to_account_info(),
+            wallet: ctx.accounts.wallet.to_account_info(),
+            whitelist_entry: ctx.accounts.whitelist_entry.to_account_info(),
+            system_program: ctx.accounts.system_program.to_account_info(),
+        };
+
+        match role {
+            ParticipantRole::Holder => {
+                delta_cpi::add_to_whitelist_with_co_authority(
+                    CpiContext::new_with_signer(cpi_program, cpi_accounts, &[seeds])
+                )?;
+            }
+            ParticipantRole::Liquidator => {
+                delta_cpi::add_to_whitelist_with_co_authority(
+                    CpiContext::new_with_signer(cpi_program, cpi_accounts, &[seeds])
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Add a participant (KYC'd holder or liquidator bot).
     /// Can be called by root authority OR any admin.
+    /// NOTE: Only works on pools where wrapping is NOT activated (authority not transferred).
+    /// For activated pools, use add_participant_via_pool.
     pub fn add_participant(
         ctx: Context<AddParticipant>,
         role: ParticipantRole,
@@ -398,6 +438,31 @@ pub mod governor {
         Ok(())
     }
 
+    /// Fix co_authority on an activated pool's MintConfig.
+    /// Sets co_authority = pool PDA so whitelist_via_pool works.
+    pub fn fix_co_authority(ctx: Context<FixCoAuthority>) -> Result<()> {
+        let pool_key = ctx.accounts.pool_config.key();
+        let underlying = ctx.accounts.pool_config.underlying_mint;
+        let bump = ctx.accounts.pool_config.bump;
+        let seeds = &[b"pool".as_ref(), underlying.as_ref(), &[bump]];
+
+        delta_cpi::set_co_authority(
+            CpiContext::new_with_signer(
+                ctx.accounts.delta_mint_program.to_account_info(),
+                delta_accounts::SetCoAuthority {
+                    authority: ctx.accounts.pool_config.to_account_info(),
+                    mint_config: ctx.accounts.dm_mint_config.to_account_info(),
+                    system_program: ctx.accounts.system_program.to_account_info(),
+                },
+                &[seeds],
+            ),
+            pool_key,
+        )?;
+
+        msg!("Co-authority set to pool PDA: {}", pool_key);
+        Ok(())
+    }
+
     /// Freeze or unfreeze the pool. Only root authority.
     pub fn set_pool_status(ctx: Context<RootOnly>, status: PoolStatus) -> Result<()> {
         ctx.accounts.pool_config.status = status;
@@ -520,7 +585,67 @@ pub struct RemoveAdmin<'info> {
     pub admin_entry: Account<'info, AdminEntry>,
 }
 
+/// Fix co_authority — uses pool PDA to sign as authority.
+#[derive(Accounts)]
+pub struct FixCoAuthority<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        has_one = authority,
+        seeds = [b"pool", pool_config.underlying_mint.as_ref()],
+        bump = pool_config.bump,
+    )]
+    pub pool_config: Account<'info, PoolConfig>,
+
+    /// CHECK: delta-mint MintConfig.
+    #[account(mut, address = pool_config.dm_mint_config)]
+    pub dm_mint_config: UncheckedAccount<'info>,
+
+    pub delta_mint_program: Program<'info, DeltaMintProgram>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Add participant via pool PDA (for activated pools where authority was transferred).
+#[derive(Accounts)]
+pub struct AddParticipantViaPool<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"pool", pool_config.underlying_mint.as_ref()],
+        bump = pool_config.bump,
+        constraint = is_authorized(
+            &authority.key(),
+            &pool_config.authority,
+            &pool_config.key(),
+            &admin_entry,
+        ) @ GovernorError::Unauthorized
+    )]
+    pub pool_config: Account<'info, PoolConfig>,
+
+    /// Optional admin PDA.
+    pub admin_entry: Option<Account<'info, AdminEntry>>,
+
+    /// CHECK: delta-mint MintConfig.
+    #[account(mut, address = pool_config.dm_mint_config)]
+    pub dm_mint_config: UncheckedAccount<'info>,
+
+    /// CHECK: The wallet to whitelist.
+    pub wallet: UncheckedAccount<'info>,
+
+    /// CHECK: WhitelistEntry PDA — created by delta-mint CPI.
+    #[account(mut)]
+    pub whitelist_entry: UncheckedAccount<'info>,
+
+    pub delta_mint_program: Program<'info, DeltaMintProgram>,
+    pub system_program: Program<'info, System>,
+}
+
 /// Add participant — root authority OR admin.
+/// NOTE: Only for non-activated pools.
 #[derive(Accounts)]
 pub struct AddParticipant<'info> {
     #[account(mut)]

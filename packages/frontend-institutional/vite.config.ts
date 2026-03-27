@@ -11,4 +11,13 @@ export default defineConfig({
       "daisyui": path.resolve(__dirname, "node_modules/daisyui"),
     },
   },
+  server: {
+    proxy: {
+      "/api/solstice": {
+        target: "https://instructions.solstice.finance",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/solstice/, "/v1/instructions"),
+      },
+    },
+  },
 });

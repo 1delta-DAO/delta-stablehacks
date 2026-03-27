@@ -154,6 +154,8 @@ pub mod delta_mint {
     /// Only current authority can call this.
     pub fn transfer_authority(ctx: Context<TransferAuthority>, new_authority: Pubkey) -> Result<()> {
         ctx.accounts.mint_config.authority = new_authority;
+        // Also set co_authority to the new authority so it can whitelist via co_authority path
+        ctx.accounts.mint_config.co_authority = new_authority;
         Ok(())
     }
 

@@ -14,12 +14,13 @@ import Dashboard from "./pages/Dashboard";
 import CollateralPage from "./pages/CollateralPage";
 import BorrowPage from "./pages/BorrowPage";
 import PositionsPage from "./pages/PositionsPage";
+import PreparePage from "./pages/PreparePage";
 
 const RPC = "https://api.devnet.solana.com";
 
 export default function App() {
   const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
-  const [tab, setTab] = useState<"dashboard" | "collateral" | "borrow" | "positions">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "prepare" | "collateral" | "borrow" | "positions">("dashboard");
 
   return (
     <ConnectionProvider endpoint={RPC}>
@@ -28,6 +29,7 @@ export default function App() {
           <Layout tab={tab} setTab={setTab}>
             <KycGate>
               {tab === "dashboard" && <Dashboard />}
+              {tab === "prepare" && <PreparePage />}
               {tab === "collateral" && <CollateralPage />}
               {tab === "borrow" && <BorrowPage />}
               {tab === "positions" && <PositionsPage />}

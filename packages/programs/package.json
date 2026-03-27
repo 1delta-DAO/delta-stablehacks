@@ -28,7 +28,9 @@
     "faucet": "npx tsx scripts/mint-test-usdc.ts",
     "localnet": "bash scripts/start-localnet.sh",
     "localnet:test": "npx tsx scripts/test-refresh-localnet.ts",
-    "create-token": "npx tsx scripts/create-wrapped-token.ts"
+    "create-token": "npx tsx scripts/create-wrapped-token.ts",
+    "setup-eusx-market": "npx tsx scripts/setup-eusx-market.ts",
+    "verify-testnet": "npx tsx scripts/verify-testnet.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
