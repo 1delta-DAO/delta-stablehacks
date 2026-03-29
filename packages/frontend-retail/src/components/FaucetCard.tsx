@@ -17,7 +17,7 @@ interface Props {
 }
 
 export function FaucetCard({ usdcBalance, onMinted }: Props) {
-  const { publicKey, sendTransaction } = useWallet();
+  const { publicKey, signTransaction } = useWallet();
   const { connection } = useConnection();
   const [status, setStatus] = useState<"idle" | "minting" | "success" | "error">("idle");
   const [error, setError] = useState("");
@@ -39,8 +39,12 @@ export function FaucetCard({ usdcBalance, onMinted }: Props) {
             publicKey, ata, publicKey, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
           )
         );
-        const sig = await sendTransaction(tx, connection);
-        await connection.confirmTransaction(sig, "confirmed");
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = publicKey;
+        const signed = await signTransaction!(tx);
+        const sig = await connection.sendRawTransaction(signed.serialize());
+        await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
       }
 
       // Call faucet API
@@ -61,7 +65,7 @@ export function FaucetCard({ usdcBalance, onMinted }: Props) {
       setError(e.message?.slice(0, 120) || "Failed");
       setStatus("error");
     }
-  }, [publicKey, connection, sendTransaction, onMinted]);
+  }, [publicKey, connection, signTransaction, onMinted]);
 
   if (!publicKey) return null;
 

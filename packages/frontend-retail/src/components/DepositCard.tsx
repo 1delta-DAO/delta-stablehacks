@@ -20,10 +20,11 @@ interface DepositCardProps {
   usdcBalance: number | null;
   config: DeploymentConfig;
   supplyAPY?: number;
+  onSuccess?: () => void;
 }
 
-export function DepositCard({ usdcBalance, config, supplyAPY = 0 }: DepositCardProps) {
-  const { publicKey, sendTransaction } = useWallet();
+export function DepositCard({ usdcBalance, config, supplyAPY = 0, onSuccess }: DepositCardProps) {
+  const { publicKey, signTransaction } = useWallet();
   const { connection } = useConnection();
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<"idle" | "depositing" | "success" | "error">("idle");
@@ -88,18 +89,24 @@ export function DepositCard({ usdcBalance, config, supplyAPY = 0 }: DepositCardP
         )
       );
 
-      const sig = await sendTransaction(tx, connection, { skipPreflight: false });
-      await connection.confirmTransaction(sig, "confirmed");
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = publicKey;
+
+      const signed = await signTransaction!(tx);
+      const sig = await connection.sendRawTransaction(signed.serialize());
+      await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
 
       setTxSig(sig);
       setStatus("success");
       setAmount("");
+      onSuccess?.();
     } catch (e: any) {
       console.error("Deposit failed:", e);
       setError(e.message?.slice(0, 120) || "Deposit failed");
       setStatus("error");
     }
-  }, [publicKey, amount, connection, config, sendTransaction]);
+  }, [publicKey, amount, connection, config, signTransaction]);
 
   const isDisabled = status === "depositing" || Number(amount) <= 0 || Number(amount) > maxAmount;
 

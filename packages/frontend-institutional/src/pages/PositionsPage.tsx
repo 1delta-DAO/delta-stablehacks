@@ -356,21 +356,34 @@ export default function PositionsPage() {
     try {
       const amt = BigInt(Math.floor(parseFloat(borrowAmt) * 1e6));
       const obPda = getObligationPda(publicKey);
-      const obInfo = await connection.getAccountInfo(obPda);
+      // Wait for RPC to reflect latest state (important after a deposit in the same session)
+      await new Promise(r => setTimeout(r, 1000));
+      const obInfo = await connection.getAccountInfo(obPda, "confirmed");
       if (!obInfo) throw new Error("No obligation. Deposit collateral first.");
       const [lma] = PublicKey.findProgramAddressSync([Buffer.from("lma"), MARKET.toBuffer()], KLEND);
       const [usdcLiqSupply] = PublicKey.findProgramAddressSync([Buffer.from("reserve_liq_supply"), USDC_RESERVE.toBuffer()], KLEND);
       const [usdcFeeRecv] = PublicKey.findProgramAddressSync([Buffer.from("fee_receiver"), USDC_RESERVE.toBuffer()], KLEND);
       const userUsdcAta = getAssociatedTokenAddressSync(USDC_MINT, publicKey);
 
+      // Ensure USDC ATA exists FIRST (before building the rest of the tx)
+      const usdcAtaInfo = await connection.getAccountInfo(userUsdcAta);
+
       const tx = new Transaction();
+
+      // Create USDC ATA if needed (must be before refresh instructions)
+      if (!usdcAtaInfo) {
+        tx.add(createAssociatedTokenAccountInstruction(publicKey, userUsdcAta, publicKey, USDC_MINT));
+      }
+
       // Refresh: borrow reserve LAST
       const reserves = findObligationReserves(Buffer.from(obInfo.data));
-      const others = reserves.filter(r => !r.equals(USDC_RESERVE));
-      for (const r of [...others, USDC_RESERVE]) {
-        const oracle = RESERVE_ORACLES[r.toBase58()]; if (!oracle) continue;
+      // Ensure both deUSX and USDC reserves are refreshed
+      const allReserves = new Set([...reserves.map(r => r.toBase58()), USDC_RESERVE.toBase58()]);
+      const refreshOrder = [...[...allReserves].filter(r => r !== USDC_RESERVE.toBase58()), USDC_RESERVE.toBase58()];
+      for (const rAddr of refreshOrder) {
+        const oracle = RESERVE_ORACLES[rAddr]; if (!oracle) continue;
         tx.add({ programId: KLEND, data: DISC.refresh_reserve, keys: [
-          { pubkey: r, isSigner: false, isWritable: true }, { pubkey: MARKET, isSigner: false, isWritable: false },
+          { pubkey: new PublicKey(rAddr), isSigner: false, isWritable: true }, { pubkey: MARKET, isSigner: false, isWritable: false },
           { pubkey: oracle, isSigner: false, isWritable: false }, { pubkey: KLEND, isSigner: false, isWritable: false },
           { pubkey: KLEND, isSigner: false, isWritable: false }, { pubkey: KLEND, isSigner: false, isWritable: false },
         ]});
@@ -379,8 +392,6 @@ export default function PositionsPage() {
         { pubkey: MARKET, isSigner: false, isWritable: false }, { pubkey: obPda, isSigner: false, isWritable: true },
         ...reserves.map(r => ({ pubkey: r, isSigner: false, isWritable: false })),
       ]});
-      const usdcAtaInfo = await connection.getAccountInfo(userUsdcAta);
-      if (!usdcAtaInfo) tx.add(createAssociatedTokenAccountInstruction(publicKey, userUsdcAta, publicKey, USDC_MINT));
       const amtBuf = Buffer.alloc(8); amtBuf.writeBigUInt64LE(amt, 0);
       tx.add({ programId: KLEND, data: Buffer.concat([DISC.borrow_obligation_liquidity, amtBuf]), keys: [
         { pubkey: publicKey, isSigner: true, isWritable: false }, { pubkey: obPda, isSigner: false, isWritable: true },

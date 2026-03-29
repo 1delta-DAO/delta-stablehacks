@@ -40,13 +40,15 @@ export const DEVNET_CONFIG = {
     gatekeeperNetwork: new PublicKey("ignREusXmGrscGNUesoU9mxfds9AiYTezUKex2PsZV6"),
   },
 
-  // Lending market
+  // Lending market (updated per IRM_NOTES.md)
   market: {
     lendingMarket: new PublicKey("45FNL648aXgbMoMzLfYE2vCZAtWWDCky2tYLCEUztc98"),
-    usdcReserve: new PublicKey("7fYbqqcWnUvz3ffH6knnRRoRhDYaK4MgHH8Cj1Uwii4j"),
-    usdcOracle: new PublicKey("CRhtYFcS32PBbRBrP31JafW15DpPpydZPKMnbkyuiD7W"),
-    dUsdyReserve: new PublicKey("HoEa26bHi96mwAu3joQZKcyxhG9jXyJvaxLNuvjcwZmw"),
-    dUsdyOracle: new PublicKey("EZxvCYEjyogA2R1Eppz1AWyxhgjZWs4nXQRk3RC2yRLt"),
+    usdcReserve: new PublicKey("AYhwFLgzxWwqznhxv6Bg1NVnNeoDNu9SBGLzM1W3hSfb"),    // sUSDC (stable curve)
+    usdcOracle: new PublicKey("EN2FsFZFdpiFAWpKDZqeJ2PY8EyE7xzz9Ew8ZQVhtHCJ"),
+    dUsdyReserve: new PublicKey("HhTUuM5XwpnQchiUiLVNxUjPkHtfbcX4aF4bWKCSSAuT"), // dtUSDY
+    dUsdyOracle: new PublicKey("4Xv1RpZQHZNHatTba3xUW4foLYUM6x36NxehihVcUnPQ"),
+    deusxReserve: new PublicKey("3FkBgVfnYBnUre6GMQZv8w4dDM1x7Fp5RiGk96kZ5mVs"), // deUSX
+    deusxOracle: new PublicKey("6dbNQrjLVQxk1bJhbB6AiMFWzaf8G2d3LPjH69Je498A"),
   },
 };
 

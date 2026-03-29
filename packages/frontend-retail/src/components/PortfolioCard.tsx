@@ -35,13 +35,25 @@ export function PortfolioCard({ usdcBalance, depositedUsdc, supplyAPY }: Portfol
         </div>
 
         {depositedUsdc > 0 && (
-          <div className="alert alert-success mt-4 flex justify-between items-center">
-            <span className="text-xs text-success">
-              Est. monthly yield ({(supplyAPY * 100).toFixed(1)}% APY)
-            </span>
-            <span className="text-base font-bold text-success">
-              +${monthlyYield.toFixed(2)}
-            </span>
+          <div className="space-y-2 mt-4">
+            <div className="alert alert-success flex justify-between items-center">
+              <span className="text-xs text-success">
+                Earning {(supplyAPY * 100).toFixed(2)}% APY
+              </span>
+              <span className="text-base font-bold text-success">
+                +${monthlyYield.toFixed(2)}/mo
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-base-300 rounded-lg p-2 text-center">
+                <div className="font-mono font-bold">${(depositedUsdc * supplyAPY).toFixed(2)}</div>
+                <div className="opacity-50">Yearly yield</div>
+              </div>
+              <div className="bg-base-300 rounded-lg p-2 text-center">
+                <div className="font-mono font-bold">${(depositedUsdc * supplyAPY / 365).toFixed(4)}</div>
+                <div className="opacity-50">Daily yield</div>
+              </div>
+            </div>
           </div>
         )}
 

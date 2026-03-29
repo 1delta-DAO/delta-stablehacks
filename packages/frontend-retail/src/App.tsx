@@ -8,6 +8,7 @@ import { PhantomWalletAdapter } from "@solana/wallet-adapter-wallets";
 import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
 import { clusterApiUrl } from "@solana/web3.js";
 import { GatewayProvider } from "@civic/solana-gateway-react";
+import { PublicKey } from "@solana/web3.js";
 import { SavingsApp } from "./pages/SavingsApp";
 import GeoGate from "./components/GeoGate";
 
@@ -17,10 +18,9 @@ const network = WalletAdapterNetwork.Devnet;
 const endpoint = clusterApiUrl(network);
 
 // Civic Uniqueness gatekeeper network (liveness check, no PII)
-const GATEKEEPER_NETWORK = "ignREusXmGrscGNUesoU9mxfds9AiYTezUKex2PsZV6";
+const GATEKEEPER_NETWORK = new PublicKey("ignREusXmGrscGNUesoU9mxfds9AiYTezUKex2PsZV6");
 
 function CivicWrapper({ children }: { children: React.ReactNode }) {
-  // GatewayProvider needs to be inside WalletProvider
   return (
     <GatewayProvider
       gatekeeperNetwork={GATEKEEPER_NETWORK}

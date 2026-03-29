@@ -14,6 +14,7 @@ interface WithdrawCardProps {
   cTokenBalance: number;
   exchangeRate: number;
   config: DeploymentConfig;
+  onSuccess?: () => void;
 }
 
 export function WithdrawCard({
@@ -21,8 +22,9 @@ export function WithdrawCard({
   cTokenBalance,
   exchangeRate,
   config,
+  onSuccess,
 }: WithdrawCardProps) {
-  const { publicKey, sendTransaction } = useWallet();
+  const { publicKey, signTransaction } = useWallet();
   const { connection } = useConnection();
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<"idle" | "withdrawing" | "success" | "error">("idle");
@@ -69,18 +71,24 @@ export function WithdrawCard({
         )
       );
 
-      const sig = await sendTransaction(tx, connection);
-      await connection.confirmTransaction(sig, "confirmed");
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = publicKey;
+
+      const signed = await signTransaction!(tx);
+      const sig = await connection.sendRawTransaction(signed.serialize());
+      await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
 
       setTxSig(sig);
       setStatus("success");
       setAmount("");
+      onSuccess?.();
     } catch (e: any) {
       console.error("Withdraw failed:", e);
       setError(e.message?.slice(0, 120) || "Withdrawal failed");
       setStatus("error");
     }
-  }, [publicKey, amount, connection, config, exchangeRate, sendTransaction]);
+  }, [publicKey, amount, connection, config, exchangeRate, signTransaction]);
 
   if (depositedUsdc <= 0) return null;
 

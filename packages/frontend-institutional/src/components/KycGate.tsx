@@ -33,8 +33,20 @@ export default function KycGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
 
+  // Session key for persisting approval across tab changes
+  const sessionKey = publicKey ? `kyc_approved_${publicKey.toBase58()}` : null;
+
   const checkWhitelist = useCallback(async () => {
     if (!publicKey) return;
+
+    // Check session cache first — avoid re-checking every tab change
+    if (sessionKey && sessionStorage.getItem(sessionKey) === "true") {
+      setStatus("approved");
+      setInstitution(sessionStorage.getItem(`${sessionKey}_pool`) || "KYC Verified");
+      setIsAdmin(publicKey.toBase58() === ROOT_AUTHORITY);
+      return;
+    }
+
     setStatus("checking");
     setError(null);
 
@@ -42,8 +54,8 @@ export default function KycGate({ children }: { children: ReactNode }) {
       const approved: string[] = [];
       let adminFound = false;
 
+      // 1. Check on-chain whitelist
       for (const pool of POOLS) {
-        // Check whitelist — validate account data length AND approved byte
         const [whitelistEntry] = PublicKey.findProgramAddressSync(
           [Buffer.from("whitelist"), new PublicKey(pool.dmConfig).toBuffer(), publicKey.toBuffer()],
           DELTA_MINT
@@ -64,13 +76,33 @@ export default function KycGate({ children }: { children: ReactNode }) {
         }
       }
 
-      // Also check if this IS the root authority
       if (publicKey.toBase58() === ROOT_AUTHORITY) adminFound = true;
+
+      // 2. If not found on-chain, check backend KYC status
+      if (approved.length === 0 && !adminFound) {
+        try {
+          const BACKEND_URL = import.meta.env.VITE_COMPLIANCE_API || "http://localhost:4000";
+          const resp = await fetch(`${BACKEND_URL}/kyc/status/${publicKey.toBase58()}`);
+          if (resp.ok) {
+            const data = await resp.json() as any;
+            if (data.data?.status === "approved") {
+              approved.push("KYC Verified");
+            }
+          }
+        } catch {} // Backend unavailable — rely on on-chain only
+      }
 
       setApprovedPools(approved);
       setIsAdmin(adminFound);
       setInstitution(approved.length > 0 ? approved[0] : adminFound ? "Admin" : null);
-      setStatus(approved.length > 0 || adminFound ? "approved" : "pending");
+      const isApproved = approved.length > 0 || adminFound;
+      setStatus(isApproved ? "approved" : "pending");
+
+      // Cache approval in session so tab changes don't re-check
+      if (isApproved && sessionKey) {
+        sessionStorage.setItem(sessionKey, "true");
+        sessionStorage.setItem(`${sessionKey}_pool`, approved[0] || "Admin");
+      }
     } catch (e: any) {
       setError("Failed to verify on-chain credentials. Check your connection and retry.");
       setStatus("error");
@@ -171,20 +203,25 @@ export default function KycGate({ children }: { children: ReactNode }) {
       // Step 3: Verify approval
       setError("Step 3/3: Verifying approval...");
 
-      if (approveData.data?.status === "approved") {
-        // Backend confirmed approval — check on-chain, but don't block on it
-        setStatus("approved");
+      if (approveData.data?.status === "approved" || approveData.message?.includes("approved")) {
+        // Backend confirmed approval — grant access immediately and cache
+        setApprovedPools(["KYC Verified"]);
         setInstitution("KYC Verified");
+        setStatus("approved");
         setVerifying(false);
-
-        // Also try on-chain check in background (for pools that wrote on-chain)
-        checkWhitelist().catch(() => {});
+        setError(null);
+        if (sessionKey) {
+          sessionStorage.setItem(sessionKey, "true");
+          sessionStorage.setItem(`${sessionKey}_pool`, "KYC Verified");
+        }
         return;
       }
 
       // Fallback: check on-chain directly
+      setError("Step 3/3: Verifying on-chain...");
       await new Promise(r => setTimeout(r, 2000));
       await checkWhitelist();
+      setVerifying(false);
     } catch (e: any) {
       setError(e.message || "Verification failed");
       setVerifying(false);

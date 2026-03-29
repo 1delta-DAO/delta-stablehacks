@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
@@ -25,13 +25,41 @@ export function SavingsApp() {
   useEffect(() => {
     if (!publicKey || !connected) { setKycStatus("unknown"); return; }
     setKycStatus("checking");
+
+    const wallet = publicKey.toBase58();
+
+    // 1. Check sessionStorage (instant, set by backend verification)
+    if (sessionStorage.getItem(`kyc_retail_${wallet}`) === "approved") {
+      setKycStatus("approved");
+      return;
+    }
+
+    // 2. Check on-chain whitelist
     const [whitelistEntry] = PublicKey.findProgramAddressSync(
       [Buffer.from("whitelist"), config.pool.dmMintConfig.toBuffer(), publicKey.toBuffer()],
       config.programs.deltaMint
     );
-    connection.getAccountInfo(whitelistEntry).then((info) => {
-      // Validate data length and approved byte (offset 64) before granting access
-      setKycStatus(info && info.data.length >= 65 && info.data[64] === 1 ? "approved" : "not_approved");
+    connection.getAccountInfo(whitelistEntry).then(async (info) => {
+      if (info && info.data.length >= 65 && info.data[64] === 1) {
+        setKycStatus("approved");
+        return;
+      }
+
+      // 3. Check backend status
+      try {
+        const COMPLIANCE_API = import.meta.env.VITE_COMPLIANCE_API || "https://stablehacks-backend-edge.achim-d87.workers.dev";
+        const resp = await fetch(`${COMPLIANCE_API}/kyc/status/${wallet}`);
+        if (resp.ok) {
+          const data = await resp.json() as any;
+          if (data.data?.status === "approved") {
+            sessionStorage.setItem(`kyc_retail_${wallet}`, "approved");
+            setKycStatus("approved");
+            return;
+          }
+        }
+      } catch {} // Backend unavailable
+
+      setKycStatus("not_approved");
     }).catch(() => {
       setKycStatus("unknown");
     });
@@ -71,6 +99,11 @@ export function SavingsApp() {
     return sig;
   }, [publicKey, governor, config]);
 
+  const refreshAll = useCallback(() => {
+    refreshUsdcBalance();
+    cTokenData.refresh();
+  }, [refreshUsdcBalance, cTokenData.refresh]);
+
   const apyDisplay = reserveData.loading ? "..." : `~${(reserveData.supplyAPY * 100).toFixed(1)}%`;
 
   return (
@@ -97,9 +130,23 @@ export function SavingsApp() {
           Deposit USDC into our regulated lending market and earn competitive returns.
           KYC-verified for your protection.
         </p>
-        <div className="inline-flex flex-col items-center bg-base-200 border-2 border-primary rounded-2xl px-10 py-4 shadow-lg shadow-primary/20">
-          <span className="text-xs uppercase tracking-widest text-base-content/50 mb-1">Current APY</span>
+        <div className="inline-flex flex-col items-center bg-base-200 border-2 border-primary rounded-2xl px-10 py-4 shadow-lg shadow-primary/20 mb-6">
+          <span className="text-xs uppercase tracking-widest text-base-content/50 mb-1">Current Supply APY</span>
           <span className="text-4xl font-black text-primary">{apyDisplay}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-4 max-w-md mx-auto text-sm">
+          <div>
+            <div className="font-bold text-base-content/80">{reserveData.loading ? "..." : `${(reserveData.utilization * 100).toFixed(1)}%`}</div>
+            <div className="text-xs text-base-content/40">Utilization</div>
+          </div>
+          <div>
+            <div className="font-bold text-base-content/80">{reserveData.loading ? "..." : `$${reserveData.totalDeposited.toFixed(0)}`}</div>
+            <div className="text-xs text-base-content/40">Total Deposited</div>
+          </div>
+          <div>
+            <div className="font-bold text-base-content/80">0.5–20%</div>
+            <div className="text-xs text-base-content/40">Borrow Rate Range</div>
+          </div>
         </div>
       </section>
 
@@ -137,12 +184,14 @@ export function SavingsApp() {
                 usdcBalance={usdcBalance}
                 config={config}
                 supplyAPY={reserveData.supplyAPY}
+                onSuccess={refreshAll}
               />
               <WithdrawCard
                 depositedUsdc={cTokenData.usdcValue}
                 cTokenBalance={cTokenData.cTokens}
                 exchangeRate={reserveData.exchangeRate}
                 config={config}
+                onSuccess={refreshAll}
               />
             </div>
           </div>

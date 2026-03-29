@@ -337,13 +337,8 @@ export default function PreparePage() {
         </p>
       </div>
 
-      {/* API Key — show input only if not loaded from env */}
-      {apiKey ? (
-        <div className="alert alert-success py-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          <span className="text-xs">Solstice API key loaded (***{apiKey.slice(-4)})</span>
-        </div>
-      ) : (
+      {/* API Key — only show input if not loaded from env */}
+      {apiKey ? null : (
       <div className="card bg-base-200 border border-base-300">
         <div className="card-body p-5">
           <div className="flex items-center gap-3">

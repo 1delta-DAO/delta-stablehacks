@@ -101,19 +101,19 @@ export function buildDepositReserveLiquidityIx(
   DEPOSIT_RESERVE_LIQUIDITY_DISC.copy(data, 0);
   data.writeBigUInt64LE(amount, 8);
 
-  // Account order from klend source: owner, market, lma, reserve, mint, liqSupply, collMint, userCollDest, userLiqSource, collTokenProg, liqTokenProg, sysvarIx
+  // Account order from klend IDL: owner, reserve, lendingMarket, lma, mint, liqSupply, collMint, userSourceLiq, userDestColl, collTokenProg, liqTokenProg, sysvarIx
   return new TransactionInstruction({
     programId: KLEND_PROGRAM,
     keys: [
-      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: false },
+      { pubkey: reserve, isSigner: false, isWritable: true },
       { pubkey: market, isSigner: false, isWritable: false },
       { pubkey: lendingMarketAuthority(market), isSigner: false, isWritable: false },
-      { pubkey: reserve, isSigner: false, isWritable: true },
       { pubkey: liquidityMint, isSigner: false, isWritable: false },
       { pubkey: reserveLiquiditySupply(reserve), isSigner: false, isWritable: true },
       { pubkey: reserveCollateralMint(reserve), isSigner: false, isWritable: true },
-      { pubkey: userDestinationCollateral, isSigner: false, isWritable: true },
       { pubkey: userSourceLiquidity, isSigner: false, isWritable: true },
+      { pubkey: userDestinationCollateral, isSigner: false, isWritable: true },
       { pubkey: collateralTokenProgram, isSigner: false, isWritable: false },
       { pubkey: liquidityTokenProgram, isSigner: false, isWritable: false },
       { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
@@ -141,10 +141,11 @@ export function buildRedeemReserveCollateralIx(
   REDEEM_RESERVE_COLLATERAL_DISC.copy(data, 0);
   data.writeBigUInt64LE(collateralAmount, 8);
 
+  // Account order from klend IDL: owner, lendingMarket, reserve, lma, mint, collMint, liqSupply, userSourceColl, userDestLiq, collTokenProg, liqTokenProg, sysvarIx
   return new TransactionInstruction({
     programId: KLEND_PROGRAM,
     keys: [
-      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: false },
       { pubkey: market, isSigner: false, isWritable: false },
       { pubkey: reserve, isSigner: false, isWritable: true },
       { pubkey: lendingMarketAuthority(market), isSigner: false, isWritable: false },
@@ -263,7 +264,7 @@ export function decodeReserveInfo(data: Buffer): ReserveInfo | null {
       protocolTakeRatePct,
       supplyAPY,
       exchangeRate: totalLiquidity > 0 && Number(cTokenMintSupply) > 0
-        ? totalLiquidity / (Number(cTokenMintSupply) / 1e6)
+        ? totalLiquidity / Number(cTokenMintSupply)
         : 1,
     };
   } catch {
