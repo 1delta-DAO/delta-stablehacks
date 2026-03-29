@@ -166,16 +166,25 @@ export default function KycGate({ children }: { children: ReactNode }) {
         throw new Error(err.error || `Approve failed: ${approveResp.status}`);
       }
 
-      // Step 3: Verify on-chain
-      setError("Step 3/3: Verifying on-chain whitelist...");
-      await new Promise(r => setTimeout(r, 2000)); // Wait for on-chain confirmation
-      await checkWhitelist();
+      const approveData = await approveResp.json() as any;
 
-      if (status !== "approved") {
-        // Backend approved but on-chain not yet visible — retry
-        await new Promise(r => setTimeout(r, 3000));
-        await checkWhitelist();
+      // Step 3: Verify approval
+      setError("Step 3/3: Verifying approval...");
+
+      if (approveData.data?.status === "approved") {
+        // Backend confirmed approval — check on-chain, but don't block on it
+        setStatus("approved");
+        setInstitution("KYC Verified");
+        setVerifying(false);
+
+        // Also try on-chain check in background (for pools that wrote on-chain)
+        checkWhitelist().catch(() => {});
+        return;
       }
+
+      // Fallback: check on-chain directly
+      await new Promise(r => setTimeout(r, 2000));
+      await checkWhitelist();
     } catch (e: any) {
       setError(e.message || "Verification failed");
       setVerifying(false);
@@ -199,18 +208,22 @@ export default function KycGate({ children }: { children: ReactNode }) {
 
         <WalletMultiButton />
 
-        <div className="grid grid-cols-3 gap-6 max-w-2xl w-full mt-4">
+        <div className="grid grid-cols-4 gap-5 max-w-2xl w-full mt-4">
           <div className="text-center space-y-2">
-            <div className="text-2xl font-bold text-primary">~10%</div>
+            <div className="text-2xl font-bold text-primary">~8-12%</div>
             <div className="text-xs text-base-content/50">Collateral Yield (eUSX)</div>
           </div>
           <div className="text-center space-y-2">
-            <div className="text-2xl font-bold text-success">75%</div>
-            <div className="text-xs text-base-content/50">Max LTV Ratio</div>
+            <div className="text-2xl font-bold text-success">95%</div>
+            <div className="text-xs text-base-content/50">Max LTV</div>
           </div>
           <div className="text-center space-y-2">
-            <div className="text-2xl font-bold text-warning">~5%</div>
-            <div className="text-xs text-base-content/50">Borrow Rate (USDC)</div>
+            <div className="text-2xl font-bold text-warning">0.5-20%</div>
+            <div className="text-xs text-base-content/50">Borrow APY (USDC)</div>
+          </div>
+          <div className="text-center space-y-2">
+            <div className="text-2xl font-bold text-accent">98%</div>
+            <div className="text-xs text-base-content/50">Liquidation Threshold</div>
           </div>
         </div>
 

@@ -166,8 +166,8 @@ export default function Dashboard() {
             <div className="bg-base-300 rounded-lg p-4 space-y-1">
               <div className="font-semibold text-sm text-warning">Carry Trade</div>
               <p className="text-xs text-base-content/50">
-                Borrow USDC at ~5% against collateral earning ~10%.
-                Net carry: ~5% APY profit on deposited capital.
+                Borrow USDC at 0.5–20% APY against collateral earning ~8–12%.
+                Net carry: up to ~10% APY profit on deposited capital.
               </p>
             </div>
           </div>

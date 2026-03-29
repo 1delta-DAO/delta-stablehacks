@@ -741,7 +741,7 @@ export default function PositionsPage() {
                 <div><span className="opacity-40">Obligation ID</span><div className="font-mono">{OB_ID}</div></div>
                 <div><span className="opacity-40">Obligation</span><div className="font-mono text-xs">{p.address.slice(0, 16)}...</div></div>
                 <div><span className="opacity-40">Market</span><div className="font-mono text-xs">{MARKET.toBase58().slice(0, 16)}...</div></div>
-                <div><span className="opacity-40">Borrow Rate</span><div className="font-mono">0.5%–50% APY</div></div>
+                <div><span className="opacity-40">Borrow Rate</span><div className="font-mono">0.5%–20% APY</div></div>
               </div>
             )}
           </div>
