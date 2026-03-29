@@ -248,6 +248,11 @@ export default function PositionsPage() {
     setStatus({ msg: `Depositing ${asset.symbol}...`, type: "info" });
     try {
       const amt = BigInt(Math.floor(parseFloat(depositAmt) * 1e6));
+
+      // Check user has the token ATA with balance
+      const userAta = getAssociatedTokenAddressSync(asset.mint, publicKey, false, asset.tokenProgram);
+      const ataInfo = await connection.getAccountInfo(userAta);
+      if (!ataInfo) throw new Error(`No ${asset.symbol} token account found. Prepare collateral first (Step 2).`);
       const obPda = getObligationPda(publicKey);
       const obInfo = await connection.getAccountInfo(obPda);
       const [userMeta] = PublicKey.findProgramAddressSync([Buffer.from("user_meta"), publicKey.toBuffer()], KLEND);
@@ -255,7 +260,6 @@ export default function PositionsPage() {
       const [liqSupply] = PublicKey.findProgramAddressSync([Buffer.from("reserve_liq_supply"), asset.reserve.toBuffer()], KLEND);
       const [collMint] = PublicKey.findProgramAddressSync([Buffer.from("reserve_coll_mint"), asset.reserve.toBuffer()], KLEND);
       const [collSupply] = PublicKey.findProgramAddressSync([Buffer.from("reserve_coll_supply"), asset.reserve.toBuffer()], KLEND);
-      const userAta = getAssociatedTokenAddressSync(asset.mint, publicKey, false, asset.tokenProgram);
 
       const tx = new Transaction();
       if (!obInfo) {
@@ -295,10 +299,13 @@ export default function PositionsPage() {
           { pubkey: KLEND, isSigner: false, isWritable: false }, { pubkey: KLEND, isSigner: false, isWritable: false },
         ]});
       }
-      tx.add({ programId: KLEND, data: DISC.refresh_obligation, keys: [
-        { pubkey: MARKET, isSigner: false, isWritable: false }, { pubkey: obPda, isSigner: false, isWritable: true },
-        ...reserves.map(r => ({ pubkey: r, isSigner: false, isWritable: false })),
-      ]});
+      // Only refresh obligation if it already exists (new obligations have nothing to refresh)
+      if (obInfo) {
+        tx.add({ programId: KLEND, data: DISC.refresh_obligation, keys: [
+          { pubkey: MARKET, isSigner: false, isWritable: false }, { pubkey: obPda, isSigner: false, isWritable: true },
+          ...reserves.map(r => ({ pubkey: r, isSigner: false, isWritable: false })),
+        ]});
+      }
 
       const amtBuf = Buffer.alloc(8); amtBuf.writeBigUInt64LE(amt, 0);
       tx.add({ programId: KLEND, data: Buffer.concat([DISC.deposit_reserve_liquidity_and_obligation_collateral, amtBuf]), keys: [
