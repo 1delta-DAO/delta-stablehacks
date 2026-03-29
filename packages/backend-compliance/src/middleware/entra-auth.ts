@@ -29,6 +29,20 @@ export async function requireEntraAuth(
   req: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
+  // Demo mode: bypass auth for devnet testing
+  if (process.env.DEMO_MODE === "true") {
+    // Use wallet address from body as unique identity (so each wallet gets its own sub)
+    const body = req.body as Record<string, any> | undefined;
+    const wallet = body?.walletAddress || "demo";
+    req.entraUser = {
+      sub: `demo-${wallet.slice(0, 8)}`,
+      name: "Demo Institution",
+      email: `${wallet.slice(0, 8)}@institution.test`,
+      roles: ["VaultAdmin"],
+    };
+    return;
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith("Bearer ")) {

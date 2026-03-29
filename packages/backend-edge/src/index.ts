@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import type { Env } from "./types.js";
 import { audit } from "./audit.js";
 import { whitelist } from "./whitelist.js";
+import { kyc } from "./kyc.js";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -10,14 +11,7 @@ const app = new Hono<{ Bindings: Env }>();
 app.use(
   "*",
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:3002",
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "http://localhost:5175",
-    ],
+    origin: "*", // Allow all origins for hackathon demo
     allowMethods: ["GET", "POST"],
     allowHeaders: ["Content-Type"],
   })
@@ -35,5 +29,6 @@ app.get("/health", (c) =>
 // Mount route groups
 app.route("/audit", audit);
 app.route("/whitelist", whitelist);
+app.route("/kyc", kyc);
 
 export default app;

@@ -29,6 +29,15 @@ Thumbs.db
 # Logs
 *.log
 
+# Keypairs and secrets
+*-keypair.json
+**/target/deploy/*.json
+**/configs/devnet/*-keypair*.json
+
+# Cloudflare Wrangler (contains KV namespace IDs)
+wrangler.toml
+.wrangler/
+
 # Transcripts and workshop notes (contain shared API keys)
 solstice-transcript.md
 workshop.md

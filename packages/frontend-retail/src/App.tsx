@@ -5,8 +5,9 @@ import {
 } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-wallets";
-import { WalletAdapterNetwork, } from "@solana/wallet-adapter-base";
+import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
 import { clusterApiUrl } from "@solana/web3.js";
+import { GatewayProvider } from "@civic/solana-gateway-react";
 import { SavingsApp } from "./pages/SavingsApp";
 import GeoGate from "./components/GeoGate";
 
@@ -14,6 +15,21 @@ import "@solana/wallet-adapter-react-ui/styles.css";
 
 const network = WalletAdapterNetwork.Devnet;
 const endpoint = clusterApiUrl(network);
+
+// Civic Uniqueness gatekeeper network (liveness check, no PII)
+const GATEKEEPER_NETWORK = "ignREusXmGrscGNUesoU9mxfds9AiYTezUKex2PsZV6";
+
+function CivicWrapper({ children }: { children: React.ReactNode }) {
+  // GatewayProvider needs to be inside WalletProvider
+  return (
+    <GatewayProvider
+      gatekeeperNetwork={GATEKEEPER_NETWORK}
+      cluster="devnet"
+    >
+      {children}
+    </GatewayProvider>
+  );
+}
 
 export default function App() {
   const wallets = useMemo(
@@ -26,7 +42,9 @@ export default function App() {
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
-          <SavingsApp />
+          <CivicWrapper>
+            <SavingsApp />
+          </CivicWrapper>
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

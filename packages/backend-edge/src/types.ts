@@ -2,6 +2,7 @@ export type Env = {
   AUDIT_KV: KVNamespace;
   WHITELIST_CACHE: KVNamespace;
   SOLANA_RPC_URL: string;
+  ADMIN_KEYPAIR_JSON?: string;
 };
 
 export interface AuditLogEntry {

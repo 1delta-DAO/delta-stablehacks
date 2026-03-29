@@ -9,11 +9,13 @@
     "types": "wrangler types"
   },
   "dependencies": {
+    "@noble/ed25519": "^3.0.1",
+    "bs58": "^6.0.0",
     "hono": "^4.7.0"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0",
     "@cloudflare/workers-types": "^4.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "wrangler": "^4.0.0"
   }
 }

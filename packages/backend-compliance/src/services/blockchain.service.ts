@@ -164,24 +164,34 @@ class SolanaBlockchainService implements BlockchainService {
 
     const existing = await this.connection.getAccountInfo(whitelistEntryPDA);
     if (existing) {
-      throw new Error(
-        `Wallet ${walletPubkey.toBase58()} already whitelisted for mint ${mintPubkey.toBase58()}`
-      );
+      // Already whitelisted — return success without error
+      return {
+        mintAddress: mintPubkey.toBase58(),
+        signature: "already_whitelisted",
+        whitelistEntryAddress: whitelistEntryPDA.toBase58(),
+      };
     }
 
-    const ix = new TransactionInstruction({
-      programId: this.programId,
-      keys: [
-        { pubkey: this.signer.publicKey(), isSigner: true, isWritable: true },
-        { pubkey: mintConfigPDA, isSigner: false, isWritable: true },
-        { pubkey: walletPubkey, isSigner: false, isWritable: false },
-        { pubkey: whitelistEntryPDA, isSigner: false, isWritable: true },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      ],
-      data: discriminator("add_to_whitelist"),
-    });
-
-    const signature = await this.sendTx(new Transaction().add(ix));
+    // Try governor's add_participant_via_pool first (for activated pools),
+    // then fall back to direct delta-mint add_to_whitelist (for non-activated pools)
+    let signature: string;
+    try {
+      signature = await this._whitelistViaGovernor(mintPubkey, mintConfigPDA, walletPubkey, whitelistEntryPDA);
+    } catch {
+      // Fallback: direct delta-mint call (works if authority hasn't been transferred)
+      const ix = new TransactionInstruction({
+        programId: this.programId,
+        keys: [
+          { pubkey: this.signer.publicKey(), isSigner: true, isWritable: true },
+          { pubkey: mintConfigPDA, isSigner: false, isWritable: true },
+          { pubkey: walletPubkey, isSigner: false, isWritable: false },
+          { pubkey: whitelistEntryPDA, isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: discriminator("add_to_whitelist"),
+      });
+      signature = await this.sendTx(new Transaction().add(ix));
+    }
 
     console.log(
       `[blockchain] Whitelisted ${walletPubkey.toBase58()} for mint ${mintPubkey.toBase58()} | tx: ${signature}`
@@ -192,6 +202,47 @@ class SolanaBlockchainService implements BlockchainService {
       signature,
       whitelistEntryAddress: whitelistEntryPDA.toBase58(),
     };
+  }
+
+  /**
+   * Whitelist via governor's add_participant_via_pool (for activated pools
+   * where the delta-mint authority has been transferred to the pool PDA).
+   */
+  private async _whitelistViaGovernor(
+    mintPubkey: PublicKey,
+    mintConfigPDA: PublicKey,
+    walletPubkey: PublicKey,
+    whitelistEntryPDA: PublicKey,
+  ): Promise<string> {
+    const GOVERNOR = new PublicKey("BrZYcbPBt9nW4b6xUSodwXRfAfRNZTCzthp1ywMG3KJh");
+
+    // Find the pool PDA for this mint's underlying
+    // Read mintConfig to find the pool
+    const mintConfigInfo = await this.connection.getAccountInfo(mintConfigPDA);
+    if (!mintConfigInfo) throw new Error("MintConfig not found");
+
+    // The pool PDA is the authority of the mintConfig (at offset 8)
+    const poolPda = new PublicKey(mintConfigInfo.data.subarray(8, 40));
+
+    // add_participant_via_pool discriminator: sha256("global:add_participant_via_pool")[0..8]
+    const disc = Buffer.from([200, 11, 127, 111, 117, 242, 194, 36]);
+
+    const ix = new TransactionInstruction({
+      programId: GOVERNOR,
+      keys: [
+        { pubkey: this.signer.publicKey(), isSigner: true, isWritable: true },
+        { pubkey: poolPda, isSigner: false, isWritable: true },
+        { pubkey: GOVERNOR, isSigner: false, isWritable: false }, // adminEntry = None (use program ID as placeholder)
+        { pubkey: mintConfigPDA, isSigner: false, isWritable: true },
+        { pubkey: walletPubkey, isSigner: false, isWritable: false },
+        { pubkey: whitelistEntryPDA, isSigner: false, isWritable: true },
+        { pubkey: this.programId, isSigner: false, isWritable: false }, // deltaMintProgram
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data: Buffer.concat([disc, Buffer.from([0])]), // ParticipantRole::Holder = 0
+    });
+
+    return this.sendTx(new Transaction().add(ix));
   }
 
   async removeFromWhitelist(walletAddress: string): Promise<string[]> {

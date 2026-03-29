@@ -31,6 +31,7 @@ export default function KycGate({ children }: { children: ReactNode }) {
   const [approvedPools, setApprovedPools] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   const checkWhitelist = useCallback(async () => {
     if (!publicKey) return;
@@ -122,6 +123,64 @@ export default function KycGate({ children }: { children: ReactNode }) {
       setStatus("pending");
     }
   }, [publicKey, connection, sendTransaction, checkWhitelist]);
+
+  // Backend-powered verification flow
+  const handleBackendVerification = useCallback(async () => {
+    if (!publicKey) return;
+    setVerifying(true);
+    setError(null);
+
+    const BACKEND_URL = import.meta.env.VITE_COMPLIANCE_API || "http://localhost:4000";
+
+    try {
+      // Step 1: Submit wallet for KYC review
+      setError("Step 1/3: Submitting identity...");
+      const submitResp = await fetch(`${BACKEND_URL}/kyc/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletAddress: publicKey.toBase58(),
+          entityType: "company",
+          name: "Demo Institution",
+          email: "demo@institution.test",
+        }),
+      });
+
+      if (!submitResp.ok) {
+        const err = await submitResp.json().catch(() => ({ error: "Backend unavailable" }));
+        throw new Error(err.error || `Submit failed: ${submitResp.status}`);
+      }
+
+      // Step 2: Auto-approve (in production this would be a manual review)
+      setError("Step 2/3: KYT screening & compliance review...");
+      await new Promise(r => setTimeout(r, 1500)); // Simulate review delay
+
+      const approveResp = await fetch(`${BACKEND_URL}/kyc/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: publicKey.toBase58() }),
+      });
+
+      if (!approveResp.ok) {
+        const err = await approveResp.json().catch(() => ({ error: "Approval failed" }));
+        throw new Error(err.error || `Approve failed: ${approveResp.status}`);
+      }
+
+      // Step 3: Verify on-chain
+      setError("Step 3/3: Verifying on-chain whitelist...");
+      await new Promise(r => setTimeout(r, 2000)); // Wait for on-chain confirmation
+      await checkWhitelist();
+
+      if (status !== "approved") {
+        // Backend approved but on-chain not yet visible — retry
+        await new Promise(r => setTimeout(r, 3000));
+        await checkWhitelist();
+      }
+    } catch (e: any) {
+      setError(e.message || "Verification failed");
+      setVerifying(false);
+    }
+  }, [publicKey, checkWhitelist]);
 
   // Not connected — landing page
   if (!connected) {
@@ -243,8 +302,12 @@ export default function KycGate({ children }: { children: ReactNode }) {
             </div>
 
             {error && (
-              <div className="alert alert-error text-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <div className={`alert ${verifying ? "alert-info" : "alert-error"} text-sm`}>
+                {verifying ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                )}
                 <span>{error}</span>
               </div>
             )}
@@ -263,28 +326,28 @@ export default function KycGate({ children }: { children: ReactNode }) {
               </div>
             )}
 
+            {/* Backend-powered verification for non-authority wallets */}
             {publicKey?.toBase58() !== ROOT_AUTHORITY && (
-              <div className="alert alert-info">
-                <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <div>
-                  <div className="font-semibold text-sm">Devnet Demo</div>
-                  <div className="text-xs">
-                    Contact governance admin to whitelist:
-                    <code className="ml-1 bg-base-100 px-1.5 py-0.5 rounded text-xs">{publicKey?.toBase58().slice(0, 20)}...</code>
-                  </div>
+              <div className="space-y-4">
+                <div className="text-center">
+                  <button
+                    className="btn btn-primary btn-lg gap-2"
+                    onClick={handleBackendVerification}
+                    disabled={verifying}
+                  >
+                    {verifying ? (
+                      <span className="loading loading-spinner loading-sm" />
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                    )}
+                    Begin Verification
+                  </button>
+                  <p className="text-xs text-base-content/30 mt-2">
+                    Compliance backend: KYC/KYB review → KYT screening → on-chain whitelist
+                  </p>
                 </div>
               </div>
             )}
-
-            <div className="text-center">
-              <button className="btn btn-primary btn-lg gap-2" disabled>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                Begin Verification
-              </button>
-              <p className="text-xs text-base-content/30 mt-2">
-                Production: Microsoft Entra B2C + Chainalysis KYT
-              </p>
-            </div>
           </div>
         </div>
       </div>
