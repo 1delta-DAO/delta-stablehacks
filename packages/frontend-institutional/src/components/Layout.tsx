@@ -45,7 +45,14 @@ export default function Layout({
           <span className="text-xs font-semibold text-primary/70">Institutional</span>
           <span className="text-xs font-mono text-base-content/30 ml-2">devnet</span>
         </div>
-        <div className="flex-none">
+        <div className="flex-none flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2 text-xs">
+            <a href="https://delta-retail.pages.dev" target="_blank" rel="noreferrer"
+              className="link link-hover text-base-content/50 hover:text-primary">Retail Savings</a>
+            <span className="text-base-content/20">|</span>
+            <a href="https://delta-console.pages.dev" target="_blank" rel="noreferrer"
+              className="link link-hover text-base-content/50 hover:text-primary">Admin Console</a>
+          </div>
           <WalletMultiButton />
         </div>
       </header>
